@@ -1,0 +1,15 @@
+{
+  "name": "ks-access",
+  "claims": {
+    "aud": "pty-golden-provider",
+    "exp": 1767226500,
+    "iat": 1767225600,
+    "iss": "gateway",
+    "jti": "jti-golden-access",
+    "purpose": "payment:pay-golden",
+    "researcher_hash": "N/A",
+    "scope": "listing:lst-golden",
+    "sub": "pty-golden-caller"
+  },
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1hY2Nlc3Mrand0In0.eyJhdWQiOiJwdHktZ29sZGVuLXByb3ZpZGVyIiwiZXhwIjoxNzY3MjI2NTAwLCJpYXQiOjE3NjcyMjU2MDAsImlzcyI6ImdhdGV3YXkiLCJqdGkiOiJqdGktZ29sZGVuLWFjY2VzcyIsInB1cnBvc2UiOiJwYXltZW50OnBheS1nb2xkZW4iLCJyZXNlYXJjaGVyX2hhc2giOiJOL0EiLCJzY29wZSI6Imxpc3Rpbmc6bHN0LWdvbGRlbiIsInN1YiI6InB0eS1nb2xkZW4tY2FsbGVyIn0.sB1ijAduA6rZwGgoobq1soG91v6kLxwmyavwMJG8Mb_d7nhkDIJi3zZGBzhYxvuBjtsYCpPSBd6FLmW_1trICg"
+}

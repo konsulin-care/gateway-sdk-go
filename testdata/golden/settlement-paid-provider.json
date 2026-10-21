@@ -1,0 +1,15 @@
+{
+  "name": "settlement-paid-provider",
+  "claims": {
+    "aud": "party-provider",
+    "body_sha256": "9bPV0d-8cRPjuaThomQ25ceFkSBWWqyTWMK0QdyeZDE",
+    "exp": 1767226500,
+    "iat": 1767225600,
+    "iss": "gateway",
+    "purpose": "settlement-notification",
+    "sub": "gateway",
+    "webhook_id": "wh-golden-paid-provider"
+  },
+  "body": "{\"payment_id\":\"pay-golden-paid-provider\",\"status\":\"paid\"}",
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1ldmVudCtqd3QifQ.eyJhdWQiOiJwYXJ0eS1wcm92aWRlciIsImJvZHlfc2hhMjU2IjoiOWJQVjBkLThjUlBqdWFUaG9tUTI1Y2VGa1NCV1dxeVRXTUswUWR5ZVpERSIsImV4cCI6MTc2NzIyNjUwMCwiaWF0IjoxNzY3MjI1NjAwLCJpc3MiOiJnYXRld2F5IiwicHVycG9zZSI6InNldHRsZW1lbnQtbm90aWZpY2F0aW9uIiwic3ViIjoiZ2F0ZXdheSIsIndlYmhvb2tfaWQiOiJ3aC1nb2xkZW4tcGFpZC1wcm92aWRlciJ9.hVdP_jcJ4U1OfkGf4qvf4rYz2qAR5E28ywG0kqdpH-SAYIpJVLBtkOxR8N_3ZPeDTIzU7d6ha9JV9OetFd6KAQ"
+}

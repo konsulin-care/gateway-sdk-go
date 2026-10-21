@@ -1,0 +1,16 @@
+{
+  "name": "ks-delivery",
+  "claims": {
+    "aud": "pty-golden-engine",
+    "body_sha256": "83PW_glDeFK_dls7rursbFtICAWUegzLnrjMl9gevVE",
+    "exp": 1767226500,
+    "iat": 1767225600,
+    "iss": "gateway",
+    "purpose": "webhook-delivery",
+    "sub": "pty-golden-sender",
+    "user_ref": "usr-golden",
+    "webhook_id": "wh-golden-delivery"
+  },
+  "body": "{\"invocation_id\":\"inv-golden\",\"kind\":\"delivery\"}",
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1kZWxpdmVyeStqd3QifQ.eyJhdWQiOiJwdHktZ29sZGVuLWVuZ2luZSIsImJvZHlfc2hhMjU2IjoiODNQV19nbERlRktfZGxzN3J1cnNiRnRJQ0FXVWVnekxucmpNbDlnZXZWRSIsImV4cCI6MTc2NzIyNjUwMCwiaWF0IjoxNzY3MjI1NjAwLCJpc3MiOiJnYXRld2F5IiwicHVycG9zZSI6IndlYmhvb2stZGVsaXZlcnkiLCJzdWIiOiJwdHktZ29sZGVuLXNlbmRlciIsInVzZXJfcmVmIjoidXNyLWdvbGRlbiIsIndlYmhvb2tfaWQiOiJ3aC1nb2xkZW4tZGVsaXZlcnkifQ.LfJJWnCivkH0ecWMDCkohiYg-9QHyy6u9seO8NO9qZqTRQAmk1ntFEVRrIiYkjdeKy9SzY37juBIcOEL03FuDg"
+}

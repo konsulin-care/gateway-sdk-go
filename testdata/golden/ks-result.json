@@ -1,0 +1,14 @@
+{
+  "name": "ks-result",
+  "claims": {
+    "aud": "pty-golden-engine",
+    "exp": 1767226500,
+    "iat": 1767225600,
+    "iss": "gateway",
+    "jti": "jti-golden-result",
+    "purpose": "webhook-result",
+    "sub": "pty-golden-sender",
+    "webhook_id": "wh-golden-result"
+  },
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1yZXN1bHQrand0In0.eyJhdWQiOiJwdHktZ29sZGVuLWVuZ2luZSIsImV4cCI6MTc2NzIyNjUwMCwiaWF0IjoxNzY3MjI1NjAwLCJpc3MiOiJnYXRld2F5IiwianRpIjoianRpLWdvbGRlbi1yZXN1bHQiLCJwdXJwb3NlIjoid2ViaG9vay1yZXN1bHQiLCJzdWIiOiJwdHktZ29sZGVuLXNlbmRlciIsIndlYmhvb2tfaWQiOiJ3aC1nb2xkZW4tcmVzdWx0In0.sjkbbA3PEZbmrs8dsvsNDuRRz8qoAOCTbKRHQKTZ9lAp8uDK-bfBrdtYBexMbPMICwLpFuR_yveo5kclbV9IDw"
+}

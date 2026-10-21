@@ -1,0 +1,11 @@
+{
+  "name": "ks-party",
+  "claims": {
+    "aud": "gateway",
+    "exp": 1767225900,
+    "iat": 1767225600,
+    "iss": "pty-golden-party",
+    "jti": "jti-golden-party"
+  },
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlZGMmhwNGVhcmhKUVZDMUhfN3hQVlZJTmxrZnhidVo3cDRZUDMwaDZIOWMiLCJ0eXAiOiJrcy1wYXJ0eStqd3QifQ.eyJhdWQiOiJnYXRld2F5IiwiZXhwIjoxNzY3MjI1OTAwLCJpYXQiOjE3NjcyMjU2MDAsImlzcyI6InB0eS1nb2xkZW4tcGFydHkiLCJqdGkiOiJqdGktZ29sZGVuLXBhcnR5In0.RTx9T3iA1dWmmMoULODdqsWPu6qteiNKFD5CeqVBqQWxRwb2ocgZPOo_pxX6AhZ7ME1LrCXixis9kE2Z_ox9AA"
+}
