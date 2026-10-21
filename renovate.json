@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "description": "Group all non-major updates under one chore(deps) prefix",
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "all non-major updates",
+      "commitMessagePrefix": "chore(deps):"
+    },
+    {
+      "description": "Keep go.mod tidy after every module update",
+      "matchManagers": ["gomod"],
+      "postUpdateOptions": ["gomodTidy"]
+    },
+    {
+      "description": "Bump tool versions pinned in .mise.toml",
+      "matchManagers": ["mise"],
+      "enabled": true
+    },
+    {
+      "description": "Pin GitHub Actions to full commit digests",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Bump the pinned GATEWAY_IMAGE docker tag in the CI workflow",
+      "managerFilePatterns": ["/^\\.github\\/workflows\\/pr-check\\.yml$/"],
+      "matchStrings": [
+        "GATEWAY_IMAGE:\\s*(?<depName>ghcr\\.io\\/[^:\\s]+):(?<currentValue>[^\\s#]+)"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ]
+}
