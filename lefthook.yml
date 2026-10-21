@@ -1,0 +1,25 @@
+# Git hooks for gateway-sdk-go (ADR-010: lefthook pre-commit/pre-push only).
+#
+# Install with `mise run hooks`. Every job delegates to scripts/qc.sh so the
+# local gate and the CI gate are the same checks:
+#   pre-commit  staged scope (qc.sh auto-detects via LEFTHOOK), parallel jobs
+#   pre-push    full-tree scope (QC_SCOPE=all), slower checks in sequence
+# No commit-msg hook (DCO deferred until the first external contribution).
+pre-commit:
+  parallel: true
+  jobs:
+    - run: mise run qc --format
+    - run: mise run qc --lint
+    - run: mise run qc --vet
+    - run: mise run qc --lines
+    - run: mise run qc --secret
+
+pre-push:
+  jobs:
+    - name: lint (full)
+      env:
+        QC_SCOPE: all
+      run: mise run qc --lint
+    - run: mise run qc --deps
+    - run: mise run qc --test
+    - run: mise run qc --vuln
