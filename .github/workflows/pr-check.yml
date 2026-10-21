@@ -1,0 +1,87 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up mise
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      - name: Quality gate
+        run: mise run qc --format --lint --vet --lines --secret --deps --test --vuln
+
+  e2e-offline:
+    name: e2e-offline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up mise
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      - name: Offline end-to-end
+        run: mise exec -- go test -race ./internal/integration/...
+
+  e2e-gateway:
+    name: e2e-gateway
+    # Same-repo PRs only: the gateway image is private and fork PRs get no
+    # secrets. Fork PRs rely on quality + e2e-offline (required); a skipped
+    # e2e-gateway counts as passing.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up mise
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      # The gateway ghcr package already grants this repo Read via Manage
+      # Actions access, so GITHUB_TOKEN with packages: read is enough —
+      # no PAT or org secret needed.
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Smoke now; phase 4 extends the job with cmd/conformance against the
+      # same throwaway gateway.
+      - name: Smoke the throwaway gateway
+        env:
+          GATEWAY_IMAGE: ghcr.io/konsulin-care/konsulin-gateway:v0.1.1
+        run: mise run e2e-gateway --smoke
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lint workflows
+        uses: reviewdog/action-actionlint@419a49378266e892f40c773b4f2fc6de9aa87499 # v1.80.4
+        with:
+          # Inline PR review comments on PRs; plain pass/fail elsewhere
+          # (push, nightly, dispatch) where there is no PR to comment on.
+          reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'local' }}
