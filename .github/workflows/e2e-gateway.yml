@@ -1,0 +1,44 @@
+name: E2E Gateway
+
+# Reusable gateway e2e: callers pass the image via the workflow_call input.
+# No secrets declaration here — GITHUB_TOKEN is granted to called workflows
+# automatically; callers must not pass inherited secrets.
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Gateway container image to smoke test
+        type: string
+        default: ghcr.io/konsulin-care/konsulin-gateway:latest
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-gateway:
+    name: e2e-gateway
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up mise
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      # The gateway ghcr package already grants this repo Read via Manage
+      # Actions access, so GITHUB_TOKEN with packages: read is enough —
+      # no PAT or org secret needed.
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Smoke now; phase 4 extends the job with cmd/conformance against the
+      # same throwaway gateway. The image is passed via env only, never
+      # interpolated into run:.
+      - name: Smoke the throwaway gateway
+        env:
+          GATEWAY_IMAGE: ${{ inputs.image }}
+        run: mise run e2e-gateway --smoke
