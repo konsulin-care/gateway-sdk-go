@@ -1,0 +1,53 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocyclo
+    - gocognit
+    - revive
+    - depguard
+
+  settings:
+    gocyclo:
+      min-complexity: 15
+    gocognit:
+      min-complexity: 15
+    revive:
+      rules:
+        - name: exported
+    depguard:
+      rules:
+        main:
+          list-mode: original
+          allow:
+            - $gostd
+            - github.com/konsulin-care/gateway-sdk-go
+          deny:
+            - pkg: github.com/go-jose/go-jose/v4
+              desc: "banned by ADR-002: stdlib-only runtime"
+            - pkg: golang.org/x/crypto
+              desc: "banned by ADR-002: stdlib-only runtime"
+            - pkg: github.com/lestrrat-go/jwx
+              desc: "banned by ADR-002: stdlib-only runtime"
+
+  exclusions:
+    paths:
+      - vendor
+    rules:
+      - linters:
+          - gocognit
+          - gocyclo
+        path: _test\.go
+      - linters:
+          - depguard
+        path: _test\.go
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
