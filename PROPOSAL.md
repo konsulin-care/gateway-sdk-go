@@ -133,7 +133,7 @@ Every party-facing route, one typed method (admin routes excluded per §5):
 | `parties` | `JWKS` | `GET /v1/parties/{id}/jwks` | public | — |
 | `parties` | `Health` | `GET /v1/parties/{id}/health` | party auth | — |
 | `identities` | `Register` | `POST /v1/identities/register` | `identity:register` | required |
-| `identities` | `Resolve` | `POST /v1/identities/resolve` | `identity:resolve` | required |
+| `identities` | `Resolve` | `POST /v1/identities/resolve` | `identity:resolve` | — (read, not a create) |
 | `identities` | `Link` | `POST /v1/identities/link` | `identity:link` | required |
 | `approvals` | `Mint` | `POST /v1/approvals` | `approval:referral` / `approval:export:<study>` | required |
 | `listings` | `Create` | `POST /v1/listings` | `listing:enlist` | required |
@@ -148,7 +148,8 @@ Every party-facing route, one typed method (admin routes excluded per §5):
 | `gateway` | `JWKS` | `GET /.well-known/jwks` | public | — |
 | `gateway` | `Health` | `GET /health` | public | — |
 
-- Inbound gateway→party surfaces are **not** client rows: payment callback (`POST /v1/payments/callback`), settlement notification, service-result delivery, and webhook delivery/result callbacks arrive at the party's own endpoints and are covered by `SDK-VERIFY` middleware. The table is the complete outbound party-call surface; every route in `../gateway/docs/api/` (admin excluded per §5) appears exactly once.
+- Inbound gateway→party surfaces are **not** client rows: payment callback (`POST /v1/payments/callback`), settlement notification, service-result delivery, and webhook delivery/result callbacks arrive at the party's own endpoints and are covered by `SDK-VERIFY` middleware.
+- Coverage rule (normative): the table is the complete outbound party-call surface — every party-facing request in `../gateway/docs/api/` tagged `auth:party`, `auth:public`, or `auth:ticket` appears exactly once (the webhook result callback carries `auth:ticket`; it is in the table as `webhooks.Result`). Exclusions are explicit, never path-prefix based: (a) the `admin` folder per §5 — including `POST /v1/admin/auth/login`, which is tagged `auth:public` but is the operator session surface; (b) any `auth:admin` route wherever it is registered, **including `GET /v1/webhooks/dlq`** (operator DLQ view, outside the `/v1/admin` prefix); (c) the `auth:provider` reference contracts (payment callback, settlement notification, service-result delivery), which are inbound to the party and covered by `SDK-VERIFY` middleware; and (d) the admin bootstrap trio used by `cmd/conformance` setup (§9.10).
 - `SDK-API-001 (M)` — every row SHALL exist with request/response structs in `wire`, context support, and typed errors; the table is the coverage checklist for M3 exit.
 - `SDK-API-002 (M)` — SHALL encode `Idempotency-Key` on the rows marked required and reject 4xx without retry (§9.8).
 
@@ -192,7 +193,7 @@ Every party-facing route, one typed method (admin routes excluded per §5):
 
 ## 11. Golden vectors & compatibility
 
-- **Mirrored set** (gateway → `testdata/golden/`, verbatim): `gateway-jwks.json`, all `ks-*.json` (approval, access, delivery, event-service-result, party, result), all `settlement-*.json`, and `testonly-party-private.key` — the party key so the SDK can prove byte-exact `ks-party` signing (SDK-AUTH-C01).
+- **Mirrored set** (gateway → `testdata/golden/`, verbatim): `gateway-jwks.json`; `ks-access.json`, `ks-approval.json`, `ks-delivery.json`, `ks-event-service-result.json`, `ks-party.json`, `ks-result.json`; `settlement-expired-buyer.json`, `settlement-expired-provider.json`, `settlement-paid-buyer.json`, `settlement-paid-provider.json`; and `testonly-party-private.key` — the party key so the SDK can prove byte-exact `ks-party` signing (SDK-AUTH-C01). The gateway's `testdata/golden/README.md` is instructions, not a vector — it stays gateway-side.
 - **Never mirrored**: `testonly-gateway-signing-private.key` stays in the gateway repo only; the SDK verifies with public JWKS.
 - **Read-only mirror**: vectors are verbatim copies — this repo never edits them locally; regeneration happens only at the gateway and flows here by mirroring.
 - **Regeneration**: regenerate at the gateway, mirror the full set here, SDK ships a new tag; either side drifting turns one CI red (lockstep).
