@@ -27,10 +27,10 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Bump the pinned GATEWAY_IMAGE docker tag in the CI workflow",
+      "description": "Bump the pinned gateway docker tag in the PR check workflow",
       "managerFilePatterns": ["/^\\.github\\/workflows\\/pr-check\\.yml$/"],
       "matchStrings": [
-        "GATEWAY_IMAGE:\\s*(?<depName>ghcr\\.io\\/[^:\\s]+):(?<currentValue>[^\\s#]+)"
+        "image:\\s*(?<depName>ghcr\\.io\\/[^:\\s]+):(?<currentValue>[^\\s#]+)"
       ],
       "datasourceTemplate": "docker"
     }
