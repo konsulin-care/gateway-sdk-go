@@ -4,7 +4,7 @@
 
 - **Module**: `github.com/konsulin-care/gateway-sdk-go` — its own repository, its own `go.mod`, its own semver tags; published as a public Go module (no registry — `proxy.golang.org` picks up the tags).
 - **License**: MIT (`LICENSE` in this repo) so both the closed-source gateway-adjacent tooling and the AGPL backend may depend on it.
-- **Go**: 1.26. **Runtime dependencies: stdlib only** — JWS (Ed25519/ES256), JWKS, JWE `ECDH-ES` + `A256GCM` over X25519, SP 800-56A Concat KDF, HMAC — all from `crypto/*`. No `golang-jwt`, no `go-jose`, no `golang.org/x/crypto`, no other `require` entries.
+- **Go**: 1.27. **Runtime dependencies: stdlib only** — JWS (Ed25519/ES256), JWKS, JWE `ECDH-ES` + `A256GCM` over X25519, SP 800-56A Concat KDF, HMAC — all from `crypto/*`. No `golang-jwt`, no `go-jose`, no `golang.org/x/crypto`: **no third-party imports from non-test code; test-only deps (`testify`) allowed**.
 - **Contract authority** (order, conflicts resolve upward): (1) the gateway's Bruno collections at `../gateway/docs/api/` plus the normative sections of the gateway's `docs/api/AGENTS.md` — *Token Kinds*, *Recipient Verification Rules*, *JWE Envelope*, *Gateway Key Rotation*; (2) the mirrored golden vectors in `testdata/golden/`; (3) this PRD. This PRD never redefines wire format.
 - **Requirement notation**: IDs `SDK-*`, priority `M`/`S`/`C`, SHALL/SHOULD/MAY, terse acceptance criteria.
 - **Independence rule (binding)**: written fresh from the contract. Nothing is copied from the AGPL backend or from the gateway's reference implementations (`capture_verify.go`, `minter.go`, `jwe.go`). The shared artifact between gateway and SDK is the **contract, not code**.
@@ -26,7 +26,7 @@ The backend originally grew an in-repo gateway client. That couples the wire con
 | Golden vectors verify | Every mirrored vector passes the SDK verifier; `ks-party` reproduced **byte for byte** from `testonly-party-private.key` (SDK-AUTH-C01) |
 | Conformance | `cmd/conformance` passes against a live gateway; gateway `qc --flow` runs the pinned runner after v0.1.0 |
 | `gatewaytest` offline | Unit tests run with zero network (httptest + fixtures only) |
-| Zero third-party runtime deps | `go.mod` carries no `require` beyond the module itself |
+| Zero third-party runtime deps | no third-party imports from non-test code; test-only deps (`testify`) allowed |
 
 ## 5. Non-goals (v1 — binding)
 
@@ -52,18 +52,23 @@ Package layout (one directory per concern; files ≤ 300 lines):
 gateway-sdk-go/
   client/           # Client core: options, transport, idempotency, retry, errors
   auth/             # ks-party signing: claims, kid, proof of possession
-  internal/jose/    # JWS compact encode/verify, JWK/JWKS, RFC 7638 thumbprints
+  internal/jws/     # compact JWS encode/verify (RFC 7515/7518), alg checks, ES256 DER<->raw R||S
+  internal/jwk/     # JWK/JWKS parse (RFC 7517), RFC 7638 thumbprints
   verify/           # inbound verification: JWKS cache, per-kind checks, middleware
   identity/         # normalization + HMAC identity hashes (gateway ADR-005)
   envelope/         # compact JWE seal/open (ECDH-ES + A256GCM over X25519)
+  gateway/          # public gateway routes: JWKS (/.well-known/jwks), Health (/health)
   parties/ identities/ approvals/ listings/ payments/ webhooks/   # typed routes
   wire/             # DTOs, typ constants, purposes, capability names, *wire.Error
   gatewaytest/      # fixture loaders, fakes, httptest helpers (offline)
-  cmd/conformance/  # conformance runner against a live gateway
+  internal/adminboot/     # admin login/party/enrollment-token/capabilities bootstrap (never public)
+  internal/conformance/   # shared conformance cases (positive + negative)
+  internal/integration/   # offline end-to-end tests against gatewaytest (no build tag)
+  cmd/conformance/  # conformance runner against a live gateway (thin main; logic in internal/conformance)
   testdata/golden/  # mirrored vectors incl. testonly-party-private.key
 ```
 
-Dependency rules (normative): `wire` and `internal/jose` import stdlib only; `internal/jose` is never re-exported; `auth` = `internal/jose` + `wire`; route packages = `client` + `auth` + `wire`; `verify` = `internal/jose` + `wire` + the `ReplayCache` interface; `envelope` = `crypto/ecdh` + `crypto/aes` + `wire`; nothing outside `internal/jose` implements JWS/JWK primitives; `gatewaytest` and `cmd/conformance` may import public packages, nothing imports `gatewaytest` except tests and the conformance command; no import cycles.
+Dependency rules (normative): non-test code imports the standard library or this module only — no third-party imports from non-test code, test-only deps (`testify`) allowed; `wire`, `internal/jws`, and `internal/jwk` import stdlib only; `internal/jws` and `internal/jwk` are never re-exported; `auth` = `internal/jws` + `internal/jwk` + `wire`; route packages and `gateway` = `client` + `auth` + `wire`; `verify` = `internal/jws` + `internal/jwk` + `wire` + the `ReplayCache` interface; `envelope` = `crypto/ecdh` + `crypto/aes` + `wire`; `internal/adminboot` = stdlib + `wire`, never part of the public client; nothing outside `internal/jws`/`internal/jwk` implements JWS/JWK primitives; `gatewaytest`, `internal/conformance`, `internal/integration`, and `cmd/conformance` may import public packages, nothing imports `gatewaytest` except test files and the conformance code; no import cycles.
 
 Key flows (normative for development):
 
@@ -186,7 +191,7 @@ Every party-facing route, one typed method (admin routes excluded per §5):
 
 - **Correctness**: golden vectors + conformance are the release gates; `-race` clean; fuzz targets on JWS/JWKS/JWE parsing and error-envelope decoding.
 - **Performance**: sign/verify adds < 1 ms p95 per call excluding network; JWKS cache hit adds no I/O; retry backoff never blocks a `context.Context` cancellation.
-- **Footprint**: zero third-party runtime deps; module adds no global state, no goroutines unless the caller starts them.
+- **Footprint**: no third-party imports from non-test code (test-only deps such as `testify` are allowed); module adds no global state, no goroutines unless the caller starts them.
 - **Thread safety**: `Client`, JWKS cache, and `ReplayCache` default are safe for concurrent use.
 - **Hygiene**: no bodies/tokens/keys/pepper in logs or errors; errors carry `request_id`, never secrets.
 - **Compatibility**: semver v0.x with a documented break policy (§12) and `COMPATIBILITY.md` (§11).
@@ -203,15 +208,15 @@ Every party-facing route, one typed method (admin routes excluded per §5):
 
 - **TDD**: write the failing test first for every `SDK-*` behavior; `github.com/stretchr/testify` — `require` for setup, `assert` for outcomes.
 - **Style**: files ≤ 300 lines (split packages, not truncation); doc comment on every exported symbol (purpose, parameters, return value); `interface`-style small interfaces over fat types; `const` declarations over mutable vars; no `interface{}`/`any` in exported signatures — explicit types, explicit error handling, no blank imports.
-- **Commits**: conventional (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`), subject < 75 chars, DCO `Signed-off-by` on every commit.
-- **CI** (required checks): `gofmt` check, `go vet`, `golangci-lint`, `govulncheck`, `go test -race ./...`, fuzz smoke on crypto parsers, golden-vector tests.
+- **Commits**: conventional (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`), subject < 75 chars. DCO `Signed-off-by`: required from the first external contribution; enforced in CI at that point.
+- **CI** (`pr-check.yml` required checks): `quality` (`gofmt`/format, `go vet`, `golangci-lint`, line cap, secret scan, deps check, `go test -race ./...`, `govulncheck`, fuzz smoke on crypto parsers, golden-vector tests), `e2e-offline` (`go test -race ./internal/integration/...` — offline e2e required on every PR), `e2e-gateway` (throwaway gateway e2e), `actionlint` (workflow linting). Testing strategy: the throwaway gateway runs from a pinned private ghcr image for same-repo PRs, pushes, nightly, and dispatch — never production; `e2e-gateway` is skipped for fork PRs, which rely on `quality` + `e2e-offline` as the required checks; `cmd/conformance` extends the `e2e-gateway` job from phase 4.
 - **Release**: semver **v0.x** — minors may break with a CHANGELOG entry and a `COMPATIBILITY.md` update; no tag without green CI + conformance.
 - **Repo files**: `LICENSE` (MIT), `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, `COMPATIBILITY.md` — all present before v0.1.0.
 
 ## 13. Milestones (with entry/exit gates)
 
-- **M0 — bootstrap**: repo, `go.mod` (Go 1.26, zero deps), MIT `LICENSE`, CI (§12), doc scaffolding. *Exit: CI green on an empty package.*
-- **M1 — JWS + auth**: `internal/jose`, JWKS, RFC 7638 thumbprints, `auth`, `wire` typ/claims; golden vectors mirrored. *Exit: SDK-AUTH-C01 byte-exact `ks-party` green.*
+- **M0 — bootstrap**: repo, `go.mod` (Go 1.27, no third-party non-test imports), MIT `LICENSE`, CI (§12), doc scaffolding. *Exit: CI green on an empty package.*
+- **M1 — JWS + auth**: `internal/jws`, `internal/jwk`, JWKS, RFC 7638 thumbprints, `auth`, `wire` typ/claims; golden vectors mirrored. *Exit: SDK-AUTH-C01 byte-exact `ks-party` green.*
 - **M2 — verify + identity**: `verify` (JWKS cache, per-kind checks, middleware, six rules), `identity` vectors. *Exit: SDK-VERIFY + SDK-ID green offline.*
 - **M3 — envelope + API surface**: `envelope` (RFC 8037 A.6), every §9.6 row, `SDK-RETRY`, `gatewaytest`. *Exit: SDK-API checklist complete, race-clean.*
 - **M4 — conformance + v0.1.0**: `cmd/conformance` (positive + negative), README recipes incl. federation pepper, `COMPATIBILITY.md`, CHANGELOG. *Exit: conformance green against a live gateway → tag **v0.1.0**.*
