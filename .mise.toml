@@ -12,6 +12,10 @@ run = "bash scripts/qc.sh"
 description = "Install lefthook pre-commit and pre-push hooks"
 run = "lefthook install"
 
+[tasks.e2e-offline]
+description = "Offline integration e2e: go test -race ./internal/integration/..."
+run = "go test -race ./internal/integration/..."
+
 [tasks.e2e-gateway]
 description = "Throwaway gateway e2e: --start --health --stop --smoke (pinned private ghcr image, never production)"
 run = "bash scripts/e2e-gateway.sh"
