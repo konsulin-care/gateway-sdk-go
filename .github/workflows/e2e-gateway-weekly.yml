@@ -1,0 +1,31 @@
+name: E2E Gateway Weekly
+
+# Weekly gateway e2e: runs Monday 00:00 UTC (GMT+0) against :latest by
+# default; workflow_dispatch allows overriding the image for manual runs.
+# Schedule runs have no inputs, so the fallback to :latest is required.
+on:
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Gateway container image to smoke test
+        type: string
+        default: ghcr.io/konsulin-care/konsulin-gateway:latest
+
+# Serialize overlapping manual and scheduled runs of this workflow.
+concurrency:
+  group: ${{ github.workflow }}
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-gateway:
+    name: e2e-gateway
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/e2e-gateway.yml
+    with:
+      image: ${{ inputs.image || 'ghcr.io/konsulin-care/konsulin-gateway:latest' }}
