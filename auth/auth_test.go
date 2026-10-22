@@ -6,7 +6,10 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -174,4 +177,47 @@ func TestSignPartyRequestES256RequiresOptIn(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, jws.CheckKindParty(gotHdr, wire.TypParty, jws.PartyES256))
 	assert.Equal(t, payload, gotPayload)
+}
+
+// goldenKSParty is the on-disk shape of testdata/golden/ks-party.json: the
+// fixture claims at their fixed iat/exp and the golden jwt to reproduce.
+type goldenKSParty struct {
+	Claims auth.PartyClaims `json:"claims"`
+	JWT    string           `json:"jwt"`
+}
+
+// TestGoldenKSPartyByteExact is the SDK-AUTH-C01 exit gate: signing the
+// ks-party fixture claims at the fixture's fixed iat and exp with
+// testonly-party-private.key produces a jwt byte-identical to the golden
+// value, and the same verification path accepts the produced token.
+func TestGoldenKSPartyByteExact(t *testing.T) {
+	golden, err := os.ReadFile("../testdata/golden/ks-party.json")
+	require.NoError(t, err)
+	var fixture goldenKSParty
+	require.NoError(t, json.Unmarshal(golden, &fixture))
+
+	keyB64, err := os.ReadFile("../testdata/golden/testonly-party-private.key")
+	require.NoError(t, err)
+	seed, err := base64.StdEncoding.DecodeString(
+		strings.TrimRight(string(keyB64), "\r\n"))
+	require.NoError(t, err)
+	require.Len(t, seed, ed25519.PrivateKeySize)
+	priv := ed25519.PrivateKey(seed)
+
+	// Signing the fixture claims at their fixed iat/exp reproduces the golden
+	// jwt byte for byte — header (alg, kid, typ) and payload included.
+	tok, err := auth.SignPartyRequest(priv, fixture.Claims)
+	require.NoError(t, err)
+	require.Equal(t, fixture.JWT, tok)
+
+	// The same verification path the caller applies accepts the produced token.
+	pub, ok := priv.Public().(ed25519.PublicKey)
+	require.True(t, ok)
+	hdr, payload, err := jws.VerifyEd25519(pub, []byte(tok))
+	require.NoError(t, err)
+	require.NoError(t, jws.CheckKindParty(hdr, wire.TypParty, jws.PartyEdDSA))
+
+	want, err := json.Marshal(fixture.Claims) // byte-exact claim order
+	require.NoError(t, err)
+	assert.Equal(t, want, payload)
 }
