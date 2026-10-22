@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -220,4 +221,74 @@ func TestGoldenKSPartyByteExact(t *testing.T) {
 	want, err := json.Marshal(fixture.Claims) // byte-exact claim order
 	require.NoError(t, err)
 	assert.Equal(t, want, payload)
+}
+
+// TestEnrollmentProofOfPossession asserts the SDK-AUTH-002 contract: the
+// proof's body_sha256 is the unpadded base64url SHA-256 of the exact body
+// bytes, one flipped body byte changes the hash, the proof travels in
+// Authorization and never in the body, kid is the RFC 7638 thumbprint.
+func TestEnrollmentProofOfPossession(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	req, err := auth.BuildEnrollment(auth.EnrollmentInput{
+		Claims:          partyClaims("jti-enroll"),
+		EnrollmentToken: "enr-token-1",
+		EncPublicKey:    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // raw 32 bytes
+	}, priv)
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(req.Body, &body))
+	assert.Len(t, body, 5) // the five fields; omitempty keeps enc present
+	assert.Equal(t, "enr-token-1", body["enrollment_token"])
+	assert.Equal(t, base64.StdEncoding.EncodeToString(pub), body["public_key"])
+	assert.Equal(t, ed25519KID(t, pub), body["kid"])
+	assert.Equal(t, "Ed25519", body["alg"])
+	assert.NotContains(t, string(req.Body), req.Proof)
+
+	sum := sha256.Sum256(req.Body)
+	wantHash := base64.RawURLEncoding.EncodeToString(sum[:])
+	mutated := append([]byte(nil), req.Body...)
+	mutated[len(mutated)/2] ^= 0x01
+	flipped := sha256.Sum256(mutated)
+	assert.NotEqual(t, wantHash, base64.RawURLEncoding.EncodeToString(flipped[:]))
+
+	hdr, payload, err := jws.VerifyEd25519(pub, []byte(req.Proof))
+	require.NoError(t, err)
+	require.NoError(t, jws.CheckKindParty(hdr, wire.TypParty, jws.PartyEdDSA))
+	assert.Equal(t, jws.AlgEdDSA, hdr.Alg)
+	assert.Equal(t, body["kid"], hdr.Kid)
+	var claims auth.EnrollmentClaims
+	require.NoError(t, json.Unmarshal(payload, &claims))
+	assert.Equal(t, wantHash, claims.BodySHA256)
+	assert.Equal(t, "pty-test", claims.Iss)
+}
+
+// TestEnrollmentES256OptInAlg asserts the opt-in ES256 enrollment path:
+// body alg ES256, proof header alg ES256, kid the P-256 thumbprint, the
+// optional enc_public_key omitted, and the default EdDSA path denying it.
+func TestEnrollmentES256OptInAlg(t *testing.T) {
+	ecPriv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	req, err := auth.BuildEnrollmentES256(auth.EnrollmentInput{
+		Claims: partyClaims("jti-enroll-es"), EnrollmentToken: "enr-token-2",
+	}, auth.ES256Key{Private: ecPriv})
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(req.Body, &body))
+	assert.Len(t, body, 4) // enc_public_key omitted when empty
+	assert.Equal(t, "ES256", body["alg"])
+	assert.Equal(t, p256KID(t, &ecPriv.PublicKey), body["kid"])
+
+	hdr, payload, err := jws.VerifyES256(&ecPriv.PublicKey, []byte(req.Proof))
+	require.NoError(t, err)
+	assert.Equal(t, jws.AlgES256, hdr.Alg)
+	require.NoError(t, jws.CheckKindParty(hdr, wire.TypParty, jws.PartyES256))
+	require.Error(t, jws.CheckKindParty(hdr, wire.TypParty, jws.PartyEdDSA))
+
+	sum := sha256.Sum256(req.Body)
+	var claims auth.EnrollmentClaims
+	require.NoError(t, json.Unmarshal(payload, &claims))
+	assert.Equal(t, base64.RawURLEncoding.EncodeToString(sum[:]), claims.BodySHA256)
 }
