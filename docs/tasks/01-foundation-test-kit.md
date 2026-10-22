@@ -23,13 +23,18 @@ later phase has an offline test kit. Exit: **SDK-AUTH-C01 byte-exact green**.
 - `SDK-WIRE-003` — `*wire.Error{Code, Message, RequestID, Status}` and the
   known error catalog (`capability_denied`, `idempotency_in_progress`,
   `GW-PARTY-007`, …) for `errors.Is/As`.
-- `SDK-AUTH-001` — `ks-party+jwt` signing: header `alg`/`kid` (RFC 7638
-  thumbprint), `iss`/`aud`/`iat`/`exp ≤ iat+300s`, single-use `jti`, exact
-  `typ`.
+- `SDK-AUTH-001` — `ks-party+jwt` signing with **Ed25519 default** (JWS
+  header `alg` `EdDSA`): header `alg`/`kid` (RFC 7638 thumbprint),
+  `iss`/`aud`/`iat`/`exp ≤ iat+300s`, single-use `jti`, exact `typ`.
+  ES256 (ECDSA P-256) is an opt-in party-key algorithm only, reachable
+  solely through an explicit opt-in key type — never the default.
 - `SDK-AUTH-002` — enrollment proof of possession: `body_sha256`
   (base64url, no padding) over the exact POST bytes, proof in
   `Authorization`, body carries `enrollment_token`, `public_key`, `kid`,
-  optional `alg`/`enc_public_key`.
+  optional `alg`/`enc_public_key`. Body `alg` is the stored key algorithm
+  (`Ed25519` or `ES256`, empty defaults to `Ed25519`); the JWT header
+  `alg` is the JWS algorithm (`EdDSA` for Ed25519, `ES256` for P-256) and
+  must match the stored key-row algorithm.
 - `SDK-AUTH-003` — fresh `jti` per attempt; retries never replay a `jti`.
 - `SDK-AUTH-C01` — byte-exact `ks-party` reproduction from
   `testdata/golden/ks-party.json` + `testonly-party-private.key`.
@@ -84,9 +89,12 @@ Edit (only if a phase-1 symbol changes the package contract):
 4. **internal/jwk** — failing RFC 7638 §3.1 thumbprint vector test and a
    JWKS parse test over `gateway-jwks.json` (current + previous key);
    implement; add the fuzz target on parsing.
-5. **internal/jws** — failing RFC 7515 A.3 vector test, alg allow-list
-   checks (exact `typ`/`alg` per Token Kinds row), ES256 DER<->raw R||S;
-   implement with byte-exact protected-header control; add the fuzz target.
+5. **internal/jws** — failing RFC 8037 §3 Ed25519 JWS vector test (the
+   default algorithm) plus alg allow-list checks (exact `typ`/`alg` per
+   Token Kinds row, EdDSA only for gateway-signed kinds); then the ES256
+   (opt-in party key, never default) RFC 7515 A.3 vector test with
+   DER<->raw R||S conversion; implement with byte-exact protected-header
+   control; add the fuzz target.
 6. **auth** — failing SDK-AUTH-C01 test: sign the fixture claims at the
    fixture's fixed `iat`/`exp` with `testonly-party-private.key` and
    compare the produced `jwt` byte for byte; then claims/sign/pop.
@@ -104,7 +112,10 @@ Edit (only if a phase-1 symbol changes the package contract):
       verification path accepts the produced token.
 - [ ] SDK-AUTH-001/002/003 tests green (fresh `jti` per attempt proven by
       signing the same claims twice).
-- [ ] RFC 7515 A.3 (JWS) and RFC 7638 §3.1 (thumbprint) vectors pass.
+- [ ] RFC 8037 §3 (Ed25519 JWS, the default), RFC 7515 A.3 (ES256), and
+      RFC 7638 §3.1 (thumbprint) vectors pass.
+- [ ] ES256 is opt-in only: default signing and minting paths are EdDSA;
+      no ES256 path is reachable without an explicit opt-in key type.
 - [ ] Fuzz targets registered and smoke-run for the JWS and JWKS parsers
       (`go test -fuzz` briefly, no crashes).
 - [ ] SDK-WIRE-002/003 tests green (constants match PRD §9.7, error
