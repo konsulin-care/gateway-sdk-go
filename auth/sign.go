@@ -98,6 +98,45 @@ func SignPartyRequestES256(key ES256Key, claims PartyClaims) (string, error) {
 	return tok, nil
 }
 
+// SignPartyAttempt signs claims into a compact ks-party+jwt token with a
+// fresh jti per attempt (SDK-AUTH-003): the supplied claims' Jti field is
+// replaced with a newly minted id before signing, so signing the same
+// claims twice yields two distinct jti values and two distinct tokens, and a
+// retry of one logical request never carries a previous attempt's jti.
+// Everything else matches SignPartyRequest: default EdDSA, claims validated
+// first, exact typ ks-party+jwt, kid = RFC 7638 thumbprint.
+//
+// Parameters: key is the signing key (same rules as SignPartyRequest,
+// including fail-closed rejection of non-Ed25519 keys); claims are the base
+// claims of the logical request — their Jti is ignored and the caller's
+// value is never mutated.
+// Returns: the compact JWS and nil, or an error. Never panics.
+func SignPartyAttempt(key crypto.Signer, claims PartyClaims) (string, error) {
+	jti, err := NewJti()
+	if err != nil {
+		return "", err
+	}
+	claims.Jti = jti
+	return SignPartyRequest(key, claims)
+}
+
+// SignPartyAttemptES256 is SignPartyAttempt for the explicit opt-in ES256
+// key type (SDK-AUTH-003): every attempt — first try or retry — mints a
+// fresh jti before signing, so the opt-in path never replays one either.
+// ES256 stays opt-in exactly as in SignPartyRequestES256.
+//
+// Parameters: key is the opt-in ES256Key wrapping the P-256 private key;
+// claims are the base claims — their Jti is ignored and never mutated.
+// Returns: the compact JWS and nil, or an error. Never panics.
+func SignPartyAttemptES256(key ES256Key, claims PartyClaims) (string, error) {
+	jti, err := NewJti()
+	if err != nil {
+		return "", err
+	}
+	claims.Jti = jti
+	return SignPartyRequestES256(key, claims)
+}
+
 // ed25519Thumbprint returns the RFC 7638 thumbprint of an Ed25519 private
 // key's public half — the header kid of every EdDSA party token.
 func ed25519Thumbprint(priv ed25519.PrivateKey) (string, error) {

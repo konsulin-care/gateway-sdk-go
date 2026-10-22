@@ -1,6 +1,14 @@
 package auth
 
-import "fmt"
+import (
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
+)
+
+// jtiEntropyBytes is the randomness behind every minted jti: 128 bits from
+// crypto/rand, base64url (no padding) encoded — 22 characters.
+const jtiEntropyBytes = 16
 
 // MaxPartyLifetime is the maximum lifetime of a ks-party+jwt token in
 // seconds: exp − iat MUST NOT exceed 300 s (SDK-AUTH-001). The bound is
@@ -24,6 +32,23 @@ type PartyClaims struct {
 	// Jti is the single-use token id. The gateway rejects a replayed jti;
 	// callers mint a fresh one per attempt (SDK-AUTH-003).
 	Jti string `json:"jti"`
+}
+
+// NewJti mints a fresh single-use jti for one signing attempt
+// (SDK-AUTH-003). Every attempt — including a retry of one logical request —
+// must carry a jti no earlier attempt has used; the gateway's replay store
+// rejects a repeated one. Ids are jtiEntropyBytes cryptographically random
+// bytes encoded base64url without padding, so they carry no clock, counter,
+// or caller state and two calls never yield the same value in practice.
+//
+// Returns: the fresh jti and nil, or an error if the system randomness
+// source fails. Never panics.
+func NewJti() (string, error) {
+	var b [jtiEntropyBytes]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("auth: fresh jti: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }
 
 // Validate checks the SDK-AUTH-001 claim constraints: iss, aud, and jti
