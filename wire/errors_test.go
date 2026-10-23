@@ -150,6 +150,154 @@ func TestDecodeErrorNonEnvelope(t *testing.T) {
 	}
 }
 
+// TestCodeCatalogLookup asserts a lookup by GW-* code returns the
+// entry with its normative HTTP status and disposition: the eight
+// hardening codes plus the two codes backed by sentinels
+// (SDK-WIRE-003). The two sentinel-backed rows must agree with the
+// sentinel's own status so errors.Is/As and the catalog cannot drift.
+func TestCodeCatalogLookup(t *testing.T) {
+	cases := []struct {
+		code        string
+		status      int
+		disposition wire.Disposition
+	}{
+		{code: "GW-PARTY-010", status: http.StatusForbidden, disposition: wire.DispositionFixRequest},
+		{code: "GW-PARTY-011", status: http.StatusForbidden, disposition: wire.DispositionFixRequest},
+		{code: "GW-HOOK-006", status: http.StatusPaymentRequired, disposition: wire.DispositionStop},
+		{code: "GW-HOOK-008", status: http.StatusUnprocessableEntity, disposition: wire.DispositionFixRequest},
+		{code: "GW-HOOK-009", status: http.StatusServiceUnavailable, disposition: wire.DispositionRetry},
+		{code: "GW-RATE-001", status: http.StatusTooManyRequests, disposition: wire.DispositionRetry},
+		{code: "GW-IDX-011", status: http.StatusTooManyRequests, disposition: wire.DispositionRetry},
+		{code: "GW-STS-005", status: http.StatusTooManyRequests, disposition: wire.DispositionRetry},
+		{code: wire.CodeIdempotencyInProgressGateway, status: http.StatusConflict, disposition: wire.DispositionRetry},
+		{code: wire.CodeInvalidEnrollmentToken, status: http.StatusUnauthorized, disposition: wire.DispositionFixRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.code, func(t *testing.T) {
+			entry, ok := wire.LookupCode(tc.code)
+			require.True(t, ok, "LookupCode(%q) missed", tc.code)
+			assert.Equal(t, tc.code, entry.Code)
+			assert.Equal(t, tc.status, entry.Status)
+			assert.Equal(t, tc.disposition, entry.Disposition)
+		})
+	}
+
+	api002, ok := wire.LookupCode(wire.CodeIdempotencyInProgressGateway)
+	require.True(t, ok)
+	assert.Equal(t, wire.ErrIdempotencyInProgress.Status, api002.Status)
+	party007, ok := wire.LookupCode(wire.CodeInvalidEnrollmentToken)
+	require.True(t, ok)
+	assert.Equal(t, wire.ErrInvalidEnrollmentToken.Status, party007.Status)
+}
+
+// TestCodeCatalogComplete enumerates the gateway Error catalog
+// (Bruno opencollection.yml §Error catalog) row for row: status and
+// disposition literals are transcribed from the normative table. The
+// catalog exposed by wire must contain exactly these rows — a code
+// added to, dropped from, or changed in the gateway table fails here
+// until the SDK catalog is updated (SDK-WIRE-003).
+func TestCodeCatalogComplete(t *testing.T) {
+	const (
+		retry  = wire.DispositionRetry
+		fix    = wire.DispositionFixRequest
+		stop   = wire.DispositionStop
+		reauth = wire.DispositionReAuthenticate
+	)
+	want := map[string]struct {
+		status int
+		disp   wire.Disposition
+	}{
+		// GW-PARTY — Registry/Resolver plane
+		"GW-PARTY-001": {404, fix},
+		"GW-PARTY-002": {403, stop},
+		"GW-PARTY-003": {409, fix},
+		"GW-PARTY-004": {400, fix},
+		"GW-PARTY-005": {404, fix},
+		"GW-PARTY-006": {409, fix},
+		"GW-PARTY-007": {401, fix},
+		"GW-PARTY-008": {403, fix},
+		"GW-PARTY-009": {502, retry},
+		"GW-PARTY-010": {403, fix},
+		"GW-PARTY-011": {403, fix},
+		// GW-IDX — Identity plane
+		"GW-IDX-001": {400, fix},
+		"GW-IDX-002": {404, fix},
+		"GW-IDX-010": {404, fix},
+		"GW-IDX-011": {429, retry},
+		// GW-STS — Ticket/Approval plane
+		"GW-STS-001": {400, fix},
+		"GW-STS-002": {410, stop},
+		"GW-STS-003": {403, fix},
+		"GW-STS-004": {403, fix},
+		"GW-STS-005": {429, retry},
+		// GW-PAY — Money plane
+		"GW-PAY-001": {500, retry},
+		"GW-PAY-002": {404, fix},
+		"GW-PAY-003": {401, stop},
+		"GW-PAY-004": {404, fix},
+		"GW-PAY-005": {404, fix},
+		"GW-PAY-006": {400, fix},
+		"GW-PAY-007": {502, retry},
+		// GW-HOOK — Integration plane
+		"GW-HOOK-001": {404, fix},
+		"GW-HOOK-002": {500, retry},
+		"GW-HOOK-003": {502, retry},
+		"GW-HOOK-004": {404, fix},
+		"GW-HOOK-005": {504, retry},
+		"GW-HOOK-006": {402, stop},
+		"GW-HOOK-007": {401, reauth},
+		"GW-HOOK-008": {422, fix},
+		"GW-HOOK-009": {503, retry},
+		// GW-ADMIN — Operator plane
+		"GW-ADMIN-001": {401, reauth},
+		"GW-ADMIN-002": {400, fix},
+		"GW-ADMIN-003": {429, retry},
+		"GW-ADMIN-004": {401, reauth},
+		"GW-ADMIN-005": {401, reauth},
+		// GW-API — Cross-cutting transport
+		"GW-API-001": {413, fix},
+		"GW-API-002": {409, retry},
+		"GW-API-003": {500, retry},
+		// GW-RATE — Rate limiting
+		"GW-RATE-001": {429, retry},
+	}
+
+	got := wire.Codes()
+	require.Len(t, got, len(want))
+	seen := make(map[string]bool, len(want))
+	for _, entry := range got {
+		exp, ok := want[entry.Code]
+		require.True(t, ok, "unexpected catalog entry %q", entry.Code)
+		require.False(t, seen[entry.Code], "duplicate catalog entry %q", entry.Code)
+		seen[entry.Code] = true
+		assert.Equal(t, exp.status, entry.Status, "status of %s", entry.Code)
+		assert.Equal(t, exp.disp, entry.Disposition, "disposition of %s", entry.Code)
+		lu, ok := wire.LookupCode(entry.Code)
+		require.True(t, ok, "LookupCode(%q) missed", entry.Code)
+		assert.Equal(t, entry, lu)
+	}
+}
+
+// TestCodeCatalogUnknownAndFresh asserts an unknown code misses the
+// catalog (false, zero entry) and Codes() hands out a copy: mutating
+// the returned slice must not corrupt later lookups (SDK-WIRE-003).
+func TestCodeCatalogUnknownAndFresh(t *testing.T) {
+	for _, code := range []string{"", "GW-NOPE-001", "GW-PARTY-0100", "not-a-code"} {
+		entry, ok := wire.LookupCode(code)
+		assert.False(t, ok, "LookupCode(%q) must miss", code)
+		assert.Equal(t, wire.CodeEntry{}, entry)
+	}
+
+	all := wire.Codes()
+	require.NotEmpty(t, all)
+	orig := all[0]
+	all[0] = wire.CodeEntry{Code: "GW-FUTURE-999", Status: 599, Disposition: wire.DispositionRetry}
+	_, ok := wire.LookupCode("GW-FUTURE-999")
+	assert.False(t, ok, "mutating Codes() result leaked into the catalog")
+	_, ok = wire.LookupCode(orig.Code)
+	assert.True(t, ok, "Codes() mutation disturbed a real entry")
+}
+
 // FuzzDecodeError feeds arbitrary status/body pairs to DecodeError and
 // asserts it never panics and always returns a usable *wire.Error
 // (PRD §14: fuzz targets on error-envelope decoding).
