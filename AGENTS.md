@@ -17,6 +17,13 @@ verification, and the JWE envelope. MIT, pre-v0.1.0.
 2. Mirrored golden vectors in `testdata/golden/`.
 3. The PRD. It never redefines wire format.
 
+The gateway checkout is an **authoring-time reference only**: contract facts
+are read from it while writing code and docs, and `scripts/mirror-golden.sh`
+reads it to refresh the mirror. **No test may read a path outside this
+module** — golden-vector integrity is proven against the in-repo
+`testdata/golden/MANIFEST.json` (ADR-004), and gateway drift is the
+out-of-band local check `mise run qc --mirror-check`, never a CI gate.
+
 ## Commands
 
 - `mise install` then `mise run hooks` — toolchain + lefthook pre-commit/pre-push.
@@ -90,6 +97,8 @@ the failing check instead; lefthook pre-commit/pre-push is the gate.
 - TDD: write the failing test first for every `SDK-*` behavior.
 - `github.com/stretchr/testify`: `require` for setup, `assert` for outcomes.
 - Unit tests are offline (`httptest` + fixtures, zero network) and `-race` clean.
+- Tests read only in-module paths (`testdata/`, fixtures, `testdata/golden/MANIFEST.json`);
+  no test may open `../gateway` or any other path outside the module.
 
 ## Conventions
 

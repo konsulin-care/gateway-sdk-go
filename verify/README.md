@@ -2,16 +2,20 @@
 
 **Purpose**: the inbound trust layer — gateway JWKS cache with TTL and one
 rate-limited refetch per unknown `kid` (then fail closed), per-kind token
-checks for all six token kinds, the six Recipient Verification Rules verbatim,
+checks for all six token kinds (`ks-event+jwt` accepts exactly four
+purposes: `settlement-notification`, `service-result`, `payment-required`,
+`service-receipt`), the six Recipient Verification Rules verbatim,
 callback middleware wrapping `http.Handler` with `webhook_id`/`jti` dedupe
 through `ReplayCache`, and the `ReplayCache` interface with an in-memory
-default.
+default. Decoding is forward-compatible (unknown claim names ignored) while
+selection stays fail-closed (unknown `typ`/`kid` deny — ADR-012).
 
 **Allowed imports** (PRD §7 dependency rules): standard library, `internal/jws`,
 `internal/jwk`, `wire`.
 
 **Related requirements**: SDK-VERIFY-001, SDK-VERIFY-002, SDK-VERIFY-003,
-SDK-VERIFY-004, SDK-VERIFY-C01.
+SDK-VERIFY-004, SDK-VERIFY-C01 (deny-unknown-`typ`/`kid` half of
+SDK-WIRE-004).
 
 **Planned files**:
 - `jwks_cache.go` — TTL cache, bounded refetch window, rotation (current + previous key)

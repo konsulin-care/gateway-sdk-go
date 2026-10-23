@@ -2,8 +2,10 @@
 
 **Purpose**: party lifecycle routes per PRD §9.6 — `Enroll`
 (`POST /v1/parties/{id}/enroll`, enrollment token + proof of possession),
-`Rotate` (`POST /v1/parties/{id}/keys`), `JWKS`
-(`GET /v1/parties/{id}/jwks`), `Health` (`GET /v1/parties/{id}/health`).
+`Rotate` (`POST /v1/parties/{id}/keys`, signed by the party's **current
+active key only** — a superseded grace-window key is rejected with
+`GW-PARTY-011`), `JWKS` (`GET /v1/parties/{id}/jwks`), `Health`
+(`GET /v1/parties/{id}/health`).
 
 **Allowed imports** (PRD §7 dependency rules): standard library, `client`,
 `auth`, `wire`.
