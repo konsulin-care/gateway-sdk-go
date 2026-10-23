@@ -298,6 +298,79 @@ func TestCodeCatalogUnknownAndFresh(t *testing.T) {
 	assert.True(t, ok, "Codes() mutation disturbed a real entry")
 }
 
+// TestRetryClassification follows the gateway Error catalog
+// disposition, including the hardening codes (SDK-RETRY-002/003):// a code whose disposition is "retry" is retryable, every other
+// disposition is terminal. A code the catalog does not define falls
+// back to status-based classification (the SDK-RETRY-002 status set
+// 429/502/503/504) instead of erroring.
+func TestRetryClassification(t *testing.T) {
+	cases := []struct {
+		name      string
+		status    int
+		code      string
+		retryable bool
+	}{
+		// Retryable (SDK-RETRY-002), incl. the hardening codes.
+		{"429 GW-RATE-001", http.StatusTooManyRequests, "GW-RATE-001", true},
+		{"429 GW-ADMIN-003", http.StatusTooManyRequests, "GW-ADMIN-003", true},
+		{"429 GW-IDX-011", http.StatusTooManyRequests, "GW-IDX-011", true},
+		{"429 GW-STS-005", http.StatusTooManyRequests, "GW-STS-005", true},
+		{"409 GW-API-002", http.StatusConflict, "GW-API-002", true},
+		{"502 no code", http.StatusBadGateway, "", true},
+		{"503 GW-HOOK-009", http.StatusServiceUnavailable, "GW-HOOK-009", true},
+		{"504 no code", http.StatusGatewayTimeout, "", true},
+		// Terminal (SDK-RETRY-003).
+		{"400 no code", http.StatusBadRequest, "", false},
+		{"401 no code", http.StatusUnauthorized, "", false},
+		{"402 GW-HOOK-006", http.StatusPaymentRequired, "GW-HOOK-006", false},
+		{"403 GW-PARTY-011", http.StatusForbidden, "GW-PARTY-011", false},
+		{"404 no code", http.StatusNotFound, "", false},
+		{"409 GW-PARTY-006", http.StatusConflict, "GW-PARTY-006", false},
+		{"413 no code", http.StatusRequestEntityTooLarge, "", false},
+		{"413 GW-API-001", http.StatusRequestEntityTooLarge, "GW-API-001", false},
+		{"422 GW-HOOK-008", http.StatusUnprocessableEntity, "GW-HOOK-008", false},
+		// Unrecognised codes fall back to status, never error.
+		{"429 unknown code", http.StatusTooManyRequests, "GW-NOPE-001", true},
+		{"503 empty code", http.StatusServiceUnavailable, "", true},
+		{"400 junk code", http.StatusBadRequest, "not-a-code", false},
+		{"409 unknown code", http.StatusConflict, "GW-NOPE-001", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.retryable, wire.Retryable(tc.status, tc.code))
+		})
+	}
+}
+
+// TestRetryClassificationMatchesCatalog asserts every cataloged code
+// classifies exactly by its normative disposition — retryable iff the
+// disposition is "retry" — so the catalog and the retry classifier can
+// never drift apart (SDK-RETRY-002/003).
+func TestRetryClassificationMatchesCatalog(t *testing.T) {
+	for _, entry := range wire.Codes() {
+		want := entry.Disposition == wire.DispositionRetry
+		assert.Equal(t, want, wire.Retryable(entry.Status, entry.Code),
+			"code %s must classify by disposition", entry.Code)
+	}
+}
+
+// TestRetry402RequiresNewIdempotencyKey pins the 402 rule
+// (SDK-RETRY-003, ADR-011): a 402 Payment Required is terminal and
+// flagged as requiring a fresh Idempotency-Key once payment is
+// settled; every other status keeps the key stable across transport
+// retries (ADR-008).
+func TestRetry402RequiresNewIdempotencyKey(t *testing.T) {
+	assert.False(t, wire.Retryable(http.StatusPaymentRequired, "GW-HOOK-006"))
+	assert.True(t, wire.RequiresNewIdempotencyKey(http.StatusPaymentRequired, "GW-HOOK-006"))
+	// Even an unrecognised 402 code is flagged: the flag is status-based.
+	assert.True(t, wire.RequiresNewIdempotencyKey(http.StatusPaymentRequired, "GW-NOPE-001"))
+
+	for _, status := range []int{200, 400, 401, 403, 404, 409, 413, 422, 429, 502, 503, 504} {
+		assert.False(t, wire.RequiresNewIdempotencyKey(status, ""),
+			"status %d must keep the Idempotency-Key stable", status)
+	}
+}
+
 // FuzzDecodeError feeds arbitrary status/body pairs to DecodeError and
 // asserts it never panics and always returns a usable *wire.Error
 // (PRD §14: fuzz targets on error-envelope decoding).
