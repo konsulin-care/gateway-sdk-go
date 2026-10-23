@@ -86,16 +86,20 @@ const (
 )
 
 // TokenKind is one row of the normative Token Kinds table: the exact
-// typ, who signs it, the claims the row requires, and who verifies it.
-// Conditional claims (e.g. user_ref on user-scoped listings) are listed
-// as in the table.
+// typ, who signs it, the claims the row requires unconditionally, the
+// claims the row allows only conditionally, and who verifies it.
 type TokenKind struct {
 	// Typ is the exact typ header value of the kind.
 	Typ string
 	// Signer is who signs tokens of this kind.
 	Signer Signer
-	// Claims lists the claim names the row requires.
+	// Claims lists the claim names the row requires unconditionally.
 	Claims []string
+	// Conditional lists claim names the row permits only in specific
+	// circumstances (e.g. user_ref on user-scoped listings, payment_id
+	// when the buyer has a PAID payment for the listing). A missing
+	// conditional claim does not fail verification.
+	Conditional []string
 	// Verifier names the party/endpoint that verifies the kind.
 	Verifier string
 }
@@ -163,10 +167,11 @@ var tokenKinds = []TokenKind{
 		Verifier: "provider",
 	},
 	{
-		Typ:      TypDelivery,
-		Signer:   SignerGateway,
-		Claims:   []string{"iss", "aud", "sub", "purpose", "webhook_id", "user_ref", "body_sha256", "iat", "exp"},
-		Verifier: "recipient endpoint",
+		Typ:         TypDelivery,
+		Signer:      SignerGateway,
+		Claims:      []string{"iss", "aud", "sub", "purpose", "webhook_id", "body_sha256", "iat", "exp"},
+		Conditional: []string{"user_ref", "payment_id"},
+		Verifier:    "recipient endpoint",
 	},
 	{
 		Typ:      TypEvent,
@@ -183,24 +188,33 @@ var tokenKinds = []TokenKind{
 }
 
 // TokenKindTable returns the normative Token Kinds table (six rows, in
-// table order). The returned slice and its contents are fresh copies;
-// mutating them does not affect the package.
+// table order). The returned slice and its Claims and Conditional
+// contents are fresh copies; mutating them does not affect the
+// package.
 func TokenKindTable() []TokenKind {
 	out := make([]TokenKind, len(tokenKinds))
 	for i, row := range tokenKinds {
 		out[i] = row
 		out[i].Claims = append([]string(nil), row.Claims...)
+		out[i].Conditional = append([]string(nil), row.Conditional...)
 	}
 	return out
 }
 
 // KindForTyp looks one token kind up by its exact typ header value.
-// Returns the table row and true on a hit, and false for any other
-// value — callers must fail closed on a miss (RFC 8725 §3.11).
+// Returns a deep copy of the table row and true on a hit, and false for
+// any other value — callers must fail closed on a miss (RFC 8725
+// §3.11).
 func KindForTyp(typ string) (TokenKind, bool) {
 	for _, row := range tokenKinds {
 		if row.Typ == typ {
-			return row, true
+			return TokenKind{
+				Typ:         row.Typ,
+				Signer:      row.Signer,
+				Claims:      append([]string(nil), row.Claims...),
+				Conditional: append([]string(nil), row.Conditional...),
+				Verifier:    row.Verifier,
+			}, true
 		}
 	}
 	return TokenKind{}, false

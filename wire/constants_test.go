@@ -101,7 +101,9 @@ func TestCapabilityCatalog(t *testing.T) {
 }
 
 // TestTokenKindTable asserts each row of the normative Token Kinds table
-// (gateway docs/api/AGENTS.md): typ, signer, required claims, verifier.
+// (gateway docs/api/AGENTS.md): typ, signer, required claims,
+// conditional claims, verifier. Claims holds only unconditional claims;
+// user_ref and payment_id are conditional on ks-delivery+jwt.
 func TestTokenKindTable(t *testing.T) {
 	table := wire.TokenKindTable()
 	require.Len(t, table, 6)
@@ -126,10 +128,11 @@ func TestTokenKindTable(t *testing.T) {
 			Verifier: "provider",
 		},
 		{
-			Typ:      "ks-delivery+jwt",
-			Signer:   wire.SignerGateway,
-			Claims:   []string{"iss", "aud", "sub", "purpose", "webhook_id", "user_ref", "body_sha256", "iat", "exp"},
-			Verifier: "recipient endpoint",
+			Typ:         "ks-delivery+jwt",
+			Signer:      wire.SignerGateway,
+			Claims:      []string{"iss", "aud", "sub", "purpose", "webhook_id", "body_sha256", "iat", "exp"},
+			Conditional: []string{"user_ref", "payment_id"},
+			Verifier:    "recipient endpoint",
 		},
 		{
 			Typ:      "ks-event+jwt",
@@ -166,4 +169,53 @@ func TestKindForTyp(t *testing.T) {
 
 	_, ok = wire.KindForTyp("JWT")
 	assert.False(t, ok)
+}
+
+// TestTokenKindConditionalSplit asserts the required/conditional split:
+// user_ref and payment_id are conditional on ks-delivery+jwt and never
+// appear among required Claims; rows without conditional claims carry
+// none.
+func TestTokenKindConditionalSplit(t *testing.T) {
+	row, ok := wire.KindForTyp("ks-delivery+jwt")
+	require.True(t, ok)
+	assert.Equal(t, []string{"user_ref", "payment_id"}, row.Conditional)
+	assert.NotContains(t, row.Claims, "user_ref")
+	assert.NotContains(t, row.Claims, "payment_id")
+	assert.Equal(t,
+		[]string{"iss", "aud", "sub", "purpose", "webhook_id", "body_sha256", "iat", "exp"},
+		row.Claims)
+
+	for _, r := range wire.TokenKindTable() {
+		if r.Typ == "ks-delivery+jwt" {
+			continue
+		}
+		assert.Empty(t, r.Conditional, "%s must list no conditional claims", r.Typ)
+	}
+}
+
+// TestTokenKindTableDeepCopiesBothSlices asserts TokenKindTable and
+// KindForTyp deep-copy both Claims and Conditional: mutating the
+// returned slices must not affect subsequent lookups.
+func TestTokenKindTableDeepCopiesBothSlices(t *testing.T) {
+	table := wire.TokenKindTable()
+	for i := range table {
+		table[i].Claims = append(table[i].Claims, "mutated-claim")
+		table[i].Conditional = append(table[i].Conditional, "mutated-conditional")
+	}
+
+	fresh := wire.TokenKindTable()
+	for _, r := range fresh {
+		assert.NotContains(t, r.Claims, "mutated-claim")
+		assert.NotContains(t, r.Conditional, "mutated-conditional")
+	}
+
+	row, ok := wire.KindForTyp("ks-delivery+jwt")
+	require.True(t, ok)
+	row.Claims[0] = "mutated"
+	row.Conditional[0] = "mutated"
+
+	again, ok := wire.KindForTyp("ks-delivery+jwt")
+	require.True(t, ok)
+	assert.Equal(t, "iss", again.Claims[0])
+	assert.Equal(t, "user_ref", again.Conditional[0])
 }
