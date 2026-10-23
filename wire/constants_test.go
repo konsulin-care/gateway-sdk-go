@@ -35,23 +35,39 @@ func TestTypsList(t *testing.T) {
 	assert.Equal(t, want, wire.Typs())
 }
 
-// TestPurposeConstants asserts the five token purposes literally
+// TestPurposeConstants asserts the seven token purposes literally
 // (PRD §9.7: webhook-delivery, settlement-notification, service-result,
-// webhook-result, admin-auth).
+// payment-required, service-receipt, webhook-result, admin-auth; the
+// last two event purposes were added during gateway hardening).
 func TestPurposeConstants(t *testing.T) {
 	assert.Equal(t, "webhook-delivery", wire.PurposeWebhookDelivery)
 	assert.Equal(t, "settlement-notification", wire.PurposeSettlementNotification)
 	assert.Equal(t, "service-result", wire.PurposeServiceResult)
+	assert.Equal(t, "payment-required", wire.PurposePaymentRequired)
+	assert.Equal(t, "service-receipt", wire.PurposeServiceReceipt)
 	assert.Equal(t, "webhook-result", wire.PurposeWebhookResult)
 	assert.Equal(t, "admin-auth", wire.PurposeAdminAuth)
+}
 
+// TestPurposesList asserts the exported purpose list in PRD order and
+// that the returned slice is a fresh copy.
+func TestPurposesList(t *testing.T) {
 	want := []string{
 		"webhook-delivery",
 		"settlement-notification",
 		"service-result",
+		"payment-required",
+		"service-receipt",
 		"webhook-result",
 		"admin-auth",
 	}
+	got := wire.Purposes()
+	require.Len(t, got, 7)
+	assert.Equal(t, want, got)
+
+	// The returned slice is a fresh copy: mutating it must not affect
+	// subsequent calls.
+	got[0] = "mutated"
 	assert.Equal(t, want, wire.Purposes())
 }
 

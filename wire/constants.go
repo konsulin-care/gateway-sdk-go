@@ -13,7 +13,8 @@ const (
 	// TypDelivery is the typ of webhook invocation delivery tokens.
 	TypDelivery = "ks-delivery+jwt"
 	// TypEvent is the typ of gateway-origin event delivery tokens
-	// (settlement notifications, service results).
+	// (settlement notifications, service results, payment-required
+	// notices, service receipts).
 	TypEvent = "ks-event+jwt"
 	// TypResult is the typ of webhook result submission tickets.
 	TypResult = "ks-result+jwt"
@@ -29,6 +30,14 @@ const (
 	// PurposeServiceResult is the purpose on service-result ks-event+jwt
 	// tokens.
 	PurposeServiceResult = "service-result"
+	// PurposePaymentRequired is the purpose on payment-required
+	// ks-event+jwt tokens (gateway hardening: buyer is told a payment
+	// is required for a listing).
+	PurposePaymentRequired = "payment-required"
+	// PurposeServiceReceipt is the purpose on service-receipt
+	// ks-event+jwt tokens (gateway hardening: provider-metered 2xx
+	// delivered to the buyer).
+	PurposeServiceReceipt = "service-receipt"
 	// PurposeWebhookResult is the purpose on ks-result+jwt tokens.
 	PurposeWebhookResult = "webhook-result"
 	// PurposeAdminAuth is the purpose on operator admin-auth tokens
@@ -98,13 +107,18 @@ func Typs() []string {
 	return []string{TypParty, TypApproval, TypAccess, TypDelivery, TypEvent, TypResult}
 }
 
-// Purposes returns the five token purpose values. The returned slice is
-// a fresh copy; mutating it does not affect the package.
+// Purposes returns the seven token purpose values in PRD §9.7 order:
+// the five original purposes with the two hardening-era event purposes
+// (payment-required, service-receipt) inserted after service-result.
+// The returned slice is a fresh copy; mutating it does not affect the
+// package.
 func Purposes() []string {
 	return []string{
 		PurposeWebhookDelivery,
 		PurposeSettlementNotification,
 		PurposeServiceResult,
+		PurposePaymentRequired,
+		PurposeServiceReceipt,
 		PurposeWebhookResult,
 		PurposeAdminAuth,
 	}
