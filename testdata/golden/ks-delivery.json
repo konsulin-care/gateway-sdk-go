@@ -6,11 +6,12 @@
     "exp": 1767226500,
     "iat": 1767225600,
     "iss": "gateway",
+    "payment_id": "pay-golden-delivery",
     "purpose": "webhook-delivery",
     "sub": "pty-golden-sender",
     "user_ref": "usr-golden",
     "webhook_id": "wh-golden-delivery"
   },
   "body": "{\"invocation_id\":\"inv-golden\",\"kind\":\"delivery\"}",
-  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1kZWxpdmVyeStqd3QifQ.eyJhdWQiOiJwdHktZ29sZGVuLWVuZ2luZSIsImJvZHlfc2hhMjU2IjoiODNQV19nbERlRktfZGxzN3J1cnNiRnRJQ0FXVWVnekxucmpNbDlnZXZWRSIsImV4cCI6MTc2NzIyNjUwMCwiaWF0IjoxNzY3MjI1NjAwLCJpc3MiOiJnYXRld2F5IiwicHVycG9zZSI6IndlYmhvb2stZGVsaXZlcnkiLCJzdWIiOiJwdHktZ29sZGVuLXNlbmRlciIsInVzZXJfcmVmIjoidXNyLWdvbGRlbiIsIndlYmhvb2tfaWQiOiJ3aC1nb2xkZW4tZGVsaXZlcnkifQ.LfJJWnCivkH0ecWMDCkohiYg-9QHyy6u9seO8NO9qZqTRQAmk1ntFEVRrIiYkjdeKy9SzY37juBIcOEL03FuDg"
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1kZWxpdmVyeStqd3QifQ.eyJhdWQiOiJwdHktZ29sZGVuLWVuZ2luZSIsImJvZHlfc2hhMjU2IjoiODNQV19nbERlRktfZGxzN3J1cnNiRnRJQ0FXVWVnekxucmpNbDlnZXZWRSIsImV4cCI6MTc2NzIyNjUwMCwiaWF0IjoxNzY3MjI1NjAwLCJpc3MiOiJnYXRld2F5IiwicGF5bWVudF9pZCI6InBheS1nb2xkZW4tZGVsaXZlcnkiLCJwdXJwb3NlIjoid2ViaG9vay1kZWxpdmVyeSIsInN1YiI6InB0eS1nb2xkZW4tc2VuZGVyIiwidXNlcl9yZWYiOiJ1c3ItZ29sZGVuIiwid2ViaG9va19pZCI6IndoLWdvbGRlbi1kZWxpdmVyeSJ9.dxT87ub9K9fPRIf9t0YYN4UlSM-8qHf2W8zOYFPkC80I8vYiPVOPpNBR66VnVyy6PxQQajglt2gVIVM0aDcMAA"
 }

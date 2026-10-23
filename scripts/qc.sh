@@ -2,10 +2,12 @@
 # Quality checks for gateway-sdk-go.
 #
 # Usage: mise run qc [--format] [--lint] [--vet] [--lines] [--secret] [--deps]
-#                    [--test] [--vuln] [--e2e-gateway]
+#                    [--test] [--vuln] [--e2e-gateway] [--mirror-check]
 # No flags runs all checks except --e2e-gateway (boots its own throwaway
-# gateway; slow). The local gate is the CI gate: the same script runs in
-# .github/workflows/pr-check.yml.
+# gateway; slow) and --mirror-check (local-only drift check against a
+# sibling ../gateway checkout; skipped when that checkout is absent). The
+# local gate is the CI gate: the same script runs (without --e2e-gateway
+# or --mirror-check) in .github/workflows/pr-check.yml.
 #
 # Scope: auto-detects staged (lefthook pre-commit) vs all (CI / manual).
 # Override with QC_SCOPE=staged|all.
@@ -35,7 +37,7 @@ fi
 # --- Parse flags ---
 RUN_FORMAT=false; RUN_LINT=false; RUN_VET=false
 RUN_LINES=false; RUN_SECRET=false; RUN_DEPS=false
-RUN_TEST=false; RUN_VULN=false; RUN_E2E=false
+RUN_TEST=false; RUN_VULN=false; RUN_E2E=false; RUN_MIRROR=false
 
 for flag in "$@"; do
   case "$flag" in
@@ -48,13 +50,16 @@ for flag in "$@"; do
     --test)          RUN_TEST=true ;;
     --vuln)          RUN_VULN=true ;;
     --e2e-gateway)   RUN_E2E=true ;;
+    --mirror-check)  RUN_MIRROR=true ;;
     *) echo "Unknown flag: $flag"; exit 1 ;;
   esac
 done
 
-# No flags = all except --e2e-gateway
+# No flags = all except --e2e-gateway and --mirror-check. Passing only
+# --mirror-check runs only the drift check, never the whole gate.
 if ! $RUN_FORMAT && ! $RUN_LINT && ! $RUN_VET && ! $RUN_LINES && \
-   ! $RUN_SECRET && ! $RUN_DEPS && ! $RUN_TEST && ! $RUN_VULN && ! $RUN_E2E; then
+   ! $RUN_SECRET && ! $RUN_DEPS && ! $RUN_TEST && ! $RUN_VULN && \
+   ! $RUN_E2E && ! $RUN_MIRROR; then
   RUN_FORMAT=true; RUN_LINT=true; RUN_VET=true; RUN_LINES=true
   RUN_SECRET=true; RUN_DEPS=true; RUN_TEST=true; RUN_VULN=true
 fi
@@ -138,6 +143,14 @@ if $RUN_DEPS; then
     printf '  %s\n' $BAD_IMPORTS
     exit 1
   fi
+fi
+
+if $RUN_MIRROR; then
+  echo "==> mirror-check"
+  # Local-only: compares testdata/golden with the sibling gateway checkout
+  # and exits 0 with a skip notice when that checkout is absent, so CI
+  # never needs the private gateway repository.
+  bash scripts/mirror-golden.sh --check
 fi
 
 if $RUN_TEST; then
