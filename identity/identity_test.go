@@ -147,3 +147,66 @@ func TestIdentityNAMarkerForNonApplicableFields(t *testing.T) {
 	require.NoError(t, err, "a non-applicable field is not an error")
 	assert.Equal(t, identity.NAMarker, got)
 }
+
+// TestHashFormatValidationAcceptsMarkerAndBase64 asserts SDK-ID-002's accept
+// path: ValidateHash mirrors the gateway hashfmt rule and accepts the "N/A"
+// marker and standard base64 of exactly 32 bytes — including a hash produced
+// by this package — while Equal is true for identical strings (markers
+// included) and false for differing ones.
+func TestHashFormatValidationAcceptsMarkerAndBase64(t *testing.T) {
+	require.Equal(t, "N/A", identity.NAMarker)
+	require.NoError(t, identity.ValidateHash(identity.NAMarker), "the hashfmt marker must validate")
+
+	sum := sha256.Sum256([]byte("sdk-id-002 accept vector"))
+	valid := base64.StdEncoding.EncodeToString(sum[:])
+	require.NoError(t, identity.ValidateHash(valid), "standard base64 of exactly 32 bytes must validate")
+
+	otherSum := sha256.Sum256([]byte("sdk-id-002 other vector"))
+	other := base64.StdEncoding.EncodeToString(otherSum[:])
+
+	hashed, err := identity.HashEmail("a@b.com", testPepper)
+	require.NoError(t, err)
+	require.NoError(t, identity.ValidateHash(hashed), "a hash produced by HashEmail must validate")
+
+	assert.True(t, identity.Equal(valid, valid), "identical strings must compare equal")
+	assert.True(t, identity.Equal(identity.NAMarker, identity.NAMarker))
+	assert.False(t, identity.Equal(valid, other), "equal-length strings with different content must differ")
+	assert.False(t, identity.Equal(valid, ""), "a string never equals the empty one")
+	assert.False(t, identity.Equal(valid, identity.NAMarker))
+}
+
+// TestHashFormatValidationRejectsMalformed asserts SDK-ID-002's deny path:
+// ValidateHash rejects the empty string, hashes decoding to 31 or 33 bytes,
+// URL-safe base64, invalid base64, and raw bytes — fail-closed before any
+// wire use — and Equal never reports such a malformed value equal to the
+// marker.
+func TestHashFormatValidationRejectsMalformed(t *testing.T) {
+	sum := sha256.Sum256([]byte("sdk-id-002 reject vector"))
+	ff := make([]byte, 32)
+	raw := make([]byte, 32)
+	for i := range ff {
+		ff[i] = 0xff
+		raw[i] = byte(i) // 0x00..0x1f: none of these bytes is in the base64 alphabet
+	}
+
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{name: "empty", value: ""},
+		{name: "31 decoded bytes", value: base64.StdEncoding.EncodeToString(sum[:31])},
+		{name: "33 decoded bytes", value: base64.StdEncoding.EncodeToString(append(sum[:32:32], 0))},
+		{name: "url-safe padded", value: base64.URLEncoding.EncodeToString(ff)},
+		{name: "url-safe unpadded", value: base64.RawURLEncoding.EncodeToString(ff)},
+		{name: "invalid base64", value: "not base64!!"},
+		{name: "raw bytes", value: string(raw)},
+		{name: "marker with padding", value: " N/A "},
+		{name: "marker, wrong case", value: "n/a"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Error(t, identity.ValidateHash(tc.value), "%q must be rejected fail-closed", tc.value)
+			assert.False(t, identity.Equal(tc.value, identity.NAMarker), "a malformed value must never equal the marker")
+		})
+	}
+}
