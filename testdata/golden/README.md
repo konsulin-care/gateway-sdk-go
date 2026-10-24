@@ -3,8 +3,20 @@
 These files are a **verbatim, read-only mirror** of the gateway repository's
 golden vectors. This repo never edits them locally: regeneration happens only
 at the gateway, and the full set flows here by mirroring
-(`scripts/mirror-golden.sh`, phase 1). Either side drifting turns one CI red
-(golden-vector lockstep, ADR-004).
+(`scripts/mirror-golden.sh`), which rewrites `MANIFEST.json` in the same run.
+
+## Manifest (ADR-004)
+
+- `MANIFEST.json` pins every mirrored file with its SHA-256 plus the gateway
+  commit the set was mirrored from.
+- `gatewaytest/manifest.go` verifies the committed set offline and fails
+  closed on a hash mismatch, a missing entry, or an on-disk vector absent
+  from the manifest. No test reads `../gateway` or any path outside the
+  module — byte-fidelity is proven against the in-repo manifest.
+- Gateway drift is an **out-of-band local check**: `mise run qc
+  --mirror-check` compares the mirror against a sibling gateway checkout and
+  is skipped, not failed, when none is present. CI never touches the
+  gateway.
 
 ## Mirrored files (PRD §11)
 

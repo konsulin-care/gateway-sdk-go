@@ -1,10 +1,14 @@
 # webhooks
 
 **Purpose**: webhook routes per PRD §9.6 — `Enqueue` (`POST /v1/webhooks`),
-`Sync` (`POST /v1/webhooks/sync`), `Status` (`GET /v1/webhooks/{id}/status`),
-`Result` (`POST /v1/webhooks/{id}/result`, single-use result ticket,
-`auth:ticket`). Inbound deliveries/results arrive at the party's own endpoints
-and are covered by `verify` middleware (SDK-VERIFY), not by this package.
+`Sync` (`POST /v1/webhooks/sync`; relays the provider's
+`X-Quota-Remaining` response header verbatim on 2xx for provider-metered
+listings, omitted when the provider sent none), `Status`
+(`GET /v1/webhooks/{id}/status`), `Result` (`POST /v1/webhooks/{id}/result`,
+single-use result ticket, `auth:ticket`). Inbound deliveries/results and
+the gateway→buyer `payment-required`/`service-receipt` event pushes arrive
+at the party's own endpoints and are covered by `verify` middleware
+(SDK-VERIFY), not by this package.
 
 **Allowed imports** (PRD §7 dependency rules): standard library, `client`,
 `auth`, `wire`.

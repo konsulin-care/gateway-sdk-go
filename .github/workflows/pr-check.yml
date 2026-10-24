@@ -48,7 +48,9 @@ jobs:
       packages: read
     uses: ./.github/workflows/e2e-gateway.yml
     with:
-      image: ghcr.io/konsulin-care/konsulin-gateway:v0.1.1 # pinned; Renovate-managed
+      # Track the latest gateway release per SDK policy (the gateway publishes
+      # :latest only on semver releases, so it is not a per-push moving target).
+      image: ghcr.io/konsulin-care/konsulin-gateway:latest
 
   actionlint:
     name: actionlint

@@ -76,15 +76,21 @@ Normative rules (PRD §7):
 
 ## 3. Key flows (normative for development)
 
-**Enrollment with proof of possession**: generate an Ed25519 keypair; `kid` =
-RFC 7638 thumbprint of the public key (never a configured value); optionally
-generate an X25519 keypair and publish the public half as `enc_public_key`
-(base64 raw 32 bytes) so counterparties can seal envelopes via the party's
-`use:enc` JWKS entry. Body `{enrollment_token, public_key, kid, alg,
-enc_public_key?}` → `POST /v1/parties/{id}/enroll`. The proof is a
-`ks-party+jwt` signed by the **new** key with `body_sha256` over the exact POST
-bytes, travelling in `Authorization: Bearer` — never in the body (it would hash
-itself). The gateway verifies against the submitted key.
+**Enrollment with proof of possession**: generate an **Ed25519** keypair —
+Ed25519 (JWS `alg` `EdDSA`) is the default party-key algorithm; ES256 (ECDSA
+P-256) is an opt-in fallback for party keys, never the default — and derive
+`kid` = RFC 7638 thumbprint of the public key (never a configured value);
+optionally generate an X25519 keypair and publish the public half as
+`enc_public_key` (base64 raw 32 bytes) so counterparties can seal envelopes via
+the party's `use:enc` JWKS entry. Body `{enrollment_token, public_key, kid,
+alg, enc_public_key?}` → `POST /v1/parties/{id}/enroll`. The body `alg` is the
+**stored key algorithm** — `Ed25519` or `ES256` — while the JWT header `alg` is
+the **JWS algorithm** — `EdDSA` for an Ed25519 key, `ES256` for a P-256 key —
+and the header `alg` must match the stored key-row algorithm (`EdDSA` ↔
+`Ed25519`, `ES256` ↔ `ES256`). The proof is a `ks-party+jwt` signed by the
+**new** key with `body_sha256` over the exact POST bytes, travelling in
+`Authorization: Bearer` — never in the body (it would hash itself). The
+gateway verifies against the submitted key.
 
 **Signed request**: every party-authenticated call signs a fresh
 `ks-party+jwt` (SDK-AUTH claims), with a **fresh `jti` per attempt** — a retry
@@ -107,6 +113,13 @@ bytes.
 
 ## 4. Security model (summary)
 
+- **Algorithms**: the SDK signs with **Ed25519 (JWS `alg` `EdDSA`) by
+  default** and verifies gateway-signed tokens **EdDSA-only**. **ES256 (ECDSA
+  P-256) is an opt-in party-key algorithm only** — reachable solely through an
+  explicit opt-in key type, never a default signing or verification path. The
+  JWT header `alg` must match the stored key-row algorithm (`EdDSA` ↔ `Ed25519`,
+  `ES256` ↔ `ES256`); enrollment body `alg` carries the stored value (`Ed25519`
+  or `ES256`), not the header value.
 - **Key custody** stays with the caller: `crypto.Signer` / `Decrypter`
   interfaces; the SDK never generates, stores, rotates, serializes, or logs
   private keys.

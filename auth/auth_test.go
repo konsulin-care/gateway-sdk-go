@@ -1,0 +1,294 @@
+package auth_test
+
+import (
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/konsulin-care/gateway-sdk-go/auth"
+	"github.com/konsulin-care/gateway-sdk-go/internal/jwk"
+	"github.com/konsulin-care/gateway-sdk-go/internal/jws"
+	"github.com/konsulin-care/gateway-sdk-go/wire"
+)
+
+// partyClaims returns valid ks-party+jwt claims at the inclusive lifetime
+// boundary exp = iat + MaxPartyLifetime.
+func partyClaims(jti string) auth.PartyClaims {
+	const iat = int64(1700000000)
+	return auth.PartyClaims{
+		Aud: "gateway",
+		Exp: iat + auth.MaxPartyLifetime,
+		Iat: iat,
+		Iss: "pty-test",
+		Jti: jti,
+	}
+}
+
+// ed25519KID returns the RFC 7638 thumbprint of an Ed25519 public key, the
+// header kid every EdDSA party token must carry.
+func ed25519KID(t *testing.T, pub ed25519.PublicKey) string {
+	t.Helper()
+	key, err := jwk.ParseKey([]byte(`{"kty":"OKP","crv":"Ed25519","x":"` +
+		base64.RawURLEncoding.EncodeToString(pub) + `"}`))
+	require.NoError(t, err)
+	kid, err := key.Thumbprint()
+	require.NoError(t, err)
+	return kid
+}
+
+// p256KID returns the RFC 7638 thumbprint of a P-256 public key, the header
+// kid every ES256 party token must carry.
+func p256KID(t *testing.T, pub *ecdsa.PublicKey) string {
+	t.Helper()
+	b, err := pub.Bytes()
+	require.NoError(t, err)
+	require.Len(t, b, 65)
+	key, err := jwk.ParseKey([]byte(fmt.Sprintf(
+		`{"kty":"EC","crv":"P-256","x":%q,"y":%q}`,
+		base64.RawURLEncoding.EncodeToString(b[1:33]),
+		base64.RawURLEncoding.EncodeToString(b[33:65]),
+	)))
+	require.NoError(t, err)
+	kid, err := key.Thumbprint()
+	require.NoError(t, err)
+	return kid
+}
+
+// TestSignPartyRequestEdDSADefault asserts the default signing path
+// (SDK-AUTH-001) produces a ks-party+jwt token with header typ ks-party+jwt,
+// alg EdDSA, kid = RFC 7638 thumbprint of the signing key, exp no later than
+// iat+300, and a payload in the exact byte order the golden vectors pin.
+func TestSignPartyRequestEdDSADefault(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	claims := partyClaims("jti-1")
+
+	tok, err := auth.SignPartyRequest(priv, claims)
+	require.NoError(t, err)
+
+	hdr, payload, _, err := jws.Parse([]byte(tok))
+	require.NoError(t, err)
+	assert.Equal(t, wire.TypParty, hdr.Typ)
+	assert.Equal(t, jws.AlgEdDSA, hdr.Alg)
+	assert.NotEqual(t, jws.AlgES256, hdr.Alg)
+	assert.Equal(t, ed25519KID(t, pub), hdr.Kid)
+	assert.LessOrEqual(t, claims.Exp, claims.Iat+auth.MaxPartyLifetime)
+
+	// Byte-exact claim order (aud, exp, iat, iss, jti) — the SDK-AUTH-C01
+	// golden reproduction depends on this serialization.
+	assert.Equal(t,
+		`{"aud":"gateway","exp":1700000300,"iat":1700000000,"iss":"pty-test","jti":"jti-1"}`,
+		string(payload))
+
+	// The same verification path the caller applies accepts the token.
+	gotHdr, gotPayload, err := jws.VerifyEd25519(pub, []byte(tok))
+	require.NoError(t, err)
+	require.NoError(t, jws.CheckKindParty(gotHdr, wire.TypParty, jws.PartyEdDSA))
+	assert.Equal(t, payload, gotPayload)
+}
+
+// TestSignPartyRequestRejectsExpiryBeyondMax asserts a request for exp beyond
+// iat+300 is rejected, exp == iat is rejected, and the boundary iat+300 is
+// accepted (the bound is inclusive).
+func TestSignPartyRequestRejectsExpiryBeyondMax(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	beyond := partyClaims("jti-2")
+	beyond.Exp = beyond.Iat + auth.MaxPartyLifetime + 1
+	_, err = auth.SignPartyRequest(priv, beyond)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "300")
+
+	expired := partyClaims("jti-3")
+	expired.Exp = expired.Iat
+	_, err = auth.SignPartyRequest(priv, expired)
+	require.Error(t, err)
+
+	boundary := partyClaims("jti-4") // exp == iat + MaxPartyLifetime
+	_, err = auth.SignPartyRequest(priv, boundary)
+	require.NoError(t, err)
+}
+
+// TestSignPartyRequestRequiresClaims asserts the SDK-AUTH-001 required claims
+// (iss, aud, jti) are enforced before signing.
+func TestSignPartyRequestRequiresClaims(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	for _, mutate := range []func(*auth.PartyClaims){
+		func(c *auth.PartyClaims) { c.Iss = "" },
+		func(c *auth.PartyClaims) { c.Aud = "" },
+		func(c *auth.PartyClaims) { c.Jti = "" },
+	} {
+		claims := partyClaims("jti-5")
+		mutate(&claims)
+		_, err := auth.SignPartyRequest(priv, claims)
+		require.Error(t, err, "claims %+v must be rejected", claims)
+	}
+}
+
+// TestSignPartyRequestES256RequiresOptIn asserts ES256 party signing is
+// reachable only through the explicit opt-in key type: an ECDSA key through
+// the default path is rejected, and the default allow-list denies the
+// resulting ES256 token.
+func TestSignPartyRequestES256RequiresOptIn(t *testing.T) {
+	claims := partyClaims("jti-es")
+	ecPriv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	// An ECDSA key through the default path is rejected, not silently
+	// upgraded to ES256.
+	_, err = auth.SignPartyRequest(ecPriv, claims)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "opt-in")
+
+	// A nil opt-in key is rejected.
+	_, err = auth.SignPartyRequestES256(auth.ES256Key{}, claims)
+	require.Error(t, err)
+
+	// The explicit opt-in path produces an ES256 ks-party+jwt token.
+	tok, err := auth.SignPartyRequestES256(auth.ES256Key{Private: ecPriv}, claims)
+	require.NoError(t, err)
+
+	hdr, payload, _, err := jws.Parse([]byte(tok))
+	require.NoError(t, err)
+	assert.Equal(t, wire.TypParty, hdr.Typ)
+	assert.Equal(t, jws.AlgES256, hdr.Alg)
+	assert.Equal(t, p256KID(t, &ecPriv.PublicKey), hdr.Kid)
+
+	// ES256 stays outside every default path: the default allow-list for
+	// ks-party+jwt is EdDSA-only.
+	require.Error(t, jws.CheckKind(hdr, wire.TypParty))
+	require.Error(t, jws.CheckKindParty(hdr, wire.TypParty, jws.PartyEdDSA))
+
+	// The opt-in verification path accepts the token.
+	gotHdr, gotPayload, err := jws.VerifyES256(&ecPriv.PublicKey, []byte(tok))
+	require.NoError(t, err)
+	require.NoError(t, jws.CheckKindParty(gotHdr, wire.TypParty, jws.PartyES256))
+	assert.Equal(t, payload, gotPayload)
+}
+
+// goldenKSParty is the on-disk shape of testdata/golden/ks-party.json: the
+// fixture claims at their fixed iat/exp and the golden jwt to reproduce.
+type goldenKSParty struct {
+	Claims auth.PartyClaims `json:"claims"`
+	JWT    string           `json:"jwt"`
+}
+
+// TestGoldenKSPartyByteExact is the SDK-AUTH-C01 exit gate: signing the
+// ks-party fixture claims at the fixture's fixed iat and exp with
+// testonly-party-private.key produces a jwt byte-identical to the golden
+// value, and the same verification path accepts the produced token.
+func TestGoldenKSPartyByteExact(t *testing.T) {
+	golden, err := os.ReadFile("../testdata/golden/ks-party.json")
+	require.NoError(t, err)
+	var fixture goldenKSParty
+	require.NoError(t, json.Unmarshal(golden, &fixture))
+
+	keyB64, err := os.ReadFile("../testdata/golden/testonly-party-private.key")
+	require.NoError(t, err)
+	seed, err := base64.StdEncoding.DecodeString(
+		strings.TrimRight(string(keyB64), "\r\n"))
+	require.NoError(t, err)
+	require.Len(t, seed, ed25519.PrivateKeySize)
+	priv := ed25519.PrivateKey(seed)
+
+	// Signing the fixture claims at their fixed iat/exp reproduces the golden
+	// jwt byte for byte — header (alg, kid, typ) and payload included.
+	tok, err := auth.SignPartyRequest(priv, fixture.Claims)
+	require.NoError(t, err)
+	require.Equal(t, fixture.JWT, tok)
+
+	// The same verification path the caller applies accepts the produced token.
+	pub, ok := priv.Public().(ed25519.PublicKey)
+	require.True(t, ok)
+	hdr, payload, err := jws.VerifyEd25519(pub, []byte(tok))
+	require.NoError(t, err)
+	require.NoError(t, jws.CheckKindParty(hdr, wire.TypParty, jws.PartyEdDSA))
+
+	want, err := json.Marshal(fixture.Claims) // byte-exact claim order
+	require.NoError(t, err)
+	assert.Equal(t, want, payload)
+}
+
+// TestEnrollmentProofOfPossession asserts the SDK-AUTH-002 contract: the
+// proof's body_sha256 is the unpadded base64url SHA-256 of the exact body
+// bytes, one flipped body byte changes the hash, the proof travels in
+// Authorization and never in the body, kid is the RFC 7638 thumbprint.
+func TestEnrollmentProofOfPossession(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	req, err := auth.BuildEnrollment(auth.EnrollmentInput{
+		Claims:          partyClaims("jti-enroll"),
+		EnrollmentToken: "enr-token-1",
+		EncPublicKey:    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // raw 32 bytes
+	}, priv)
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(req.Body, &body))
+	assert.Len(t, body, 5) // the five fields; omitempty keeps enc present
+	assert.Equal(t, "enr-token-1", body["enrollment_token"])
+	assert.Equal(t, base64.StdEncoding.EncodeToString(pub), body["public_key"])
+	assert.Equal(t, ed25519KID(t, pub), body["kid"])
+	assert.Equal(t, "Ed25519", body["alg"])
+	assert.NotContains(t, string(req.Body), req.Proof)
+
+	sum := sha256.Sum256(req.Body)
+	wantHash := base64.RawURLEncoding.EncodeToString(sum[:])
+	mutated := append([]byte(nil), req.Body...)
+	mutated[len(mutated)/2] ^= 0x01
+	flipped := sha256.Sum256(mutated)
+	assert.NotEqual(t, wantHash, base64.RawURLEncoding.EncodeToString(flipped[:]))
+
+	hdr, payload, err := jws.VerifyEd25519(pub, []byte(req.Proof))
+	require.NoError(t, err)
+	require.NoError(t, jws.CheckKindParty(hdr, wire.TypParty, jws.PartyEdDSA))
+	assert.Equal(t, jws.AlgEdDSA, hdr.Alg)
+	assert.Equal(t, body["kid"], hdr.Kid)
+	var claims auth.EnrollmentClaims
+	require.NoError(t, json.Unmarshal(payload, &claims))
+	assert.Equal(t, wantHash, claims.BodySHA256)
+	assert.Equal(t, "pty-test", claims.Iss)
+}
+
+// TestEnrollmentES256OptInAlg asserts the opt-in ES256 enrollment path:
+// body alg ES256, proof header alg ES256, kid the P-256 thumbprint, the
+// optional enc_public_key omitted, and the default EdDSA path denying it.
+func TestEnrollmentES256OptInAlg(t *testing.T) {
+	ecPriv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	req, err := auth.BuildEnrollmentES256(auth.EnrollmentInput{
+		Claims: partyClaims("jti-enroll-es"), EnrollmentToken: "enr-token-2",
+	}, auth.ES256Key{Private: ecPriv})
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(req.Body, &body))
+	assert.Len(t, body, 4) // enc_public_key omitted when empty
+	assert.Equal(t, "ES256", body["alg"])
+	assert.Equal(t, p256KID(t, &ecPriv.PublicKey), body["kid"])
+
+	hdr, payload, err := jws.VerifyES256(&ecPriv.PublicKey, []byte(req.Proof))
+	require.NoError(t, err)
+	assert.Equal(t, jws.AlgES256, hdr.Alg)
+	require.NoError(t, jws.CheckKindParty(hdr, wire.TypParty, jws.PartyES256))
+	require.Error(t, jws.CheckKindParty(hdr, wire.TypParty, jws.PartyEdDSA))
+
+	sum := sha256.Sum256(req.Body)
+	var claims auth.EnrollmentClaims
+	require.NoError(t, json.Unmarshal(payload, &claims))
+	assert.Equal(t, base64.RawURLEncoding.EncodeToString(sum[:]), claims.BodySHA256)
+}

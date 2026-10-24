@@ -1,0 +1,15 @@
+{
+  "name": "settlement-expired-buyer",
+  "claims": {
+    "aud": "party-buyer",
+    "body_sha256": "nyPHYEvmiw2Gae_AKCR9GT5sZ7-nfqLqts1ZpefWwEo",
+    "exp": 1767226500,
+    "iat": 1767225600,
+    "iss": "gateway",
+    "purpose": "settlement-notification",
+    "sub": "gateway",
+    "webhook_id": "wh-golden-expired-buyer"
+  },
+  "body": "{\"payment_id\":\"pay-golden-expired-buyer\",\"status\":\"expired\"}",
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1ldmVudCtqd3QifQ.eyJhdWQiOiJwYXJ0eS1idXllciIsImJvZHlfc2hhMjU2IjoibnlQSFlFdm1pdzJHYWVfQUtDUjlHVDVzWjctbmZxTHF0czFacGVmV3dFbyIsImV4cCI6MTc2NzIyNjUwMCwiaWF0IjoxNzY3MjI1NjAwLCJpc3MiOiJnYXRld2F5IiwicHVycG9zZSI6InNldHRsZW1lbnQtbm90aWZpY2F0aW9uIiwic3ViIjoiZ2F0ZXdheSIsIndlYmhvb2tfaWQiOiJ3aC1nb2xkZW4tZXhwaXJlZC1idXllciJ9.hbTfDhhz_doiOt-Or8TtIymvWI52xffUWb460WKllkphML26OYrBfj73fub7lcAcHTmXQY5jIgNyNghLrM1YAA"
+}

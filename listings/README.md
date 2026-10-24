@@ -3,6 +3,10 @@
 **Purpose**: listing routes per PRD §9.6 — `Create`
 (`POST /v1/listings`, capability `listing:enlist`, `Idempotency-Key` required)
 and `List` (`GET /v1/listings`, public, read — no idempotency key).
+`List` response shape: `endpoint_url` is returned only for
+`invocation: commodity` listings and **omitted for `invocation: webhook`
+rows** (the public read never exposes a provider endpoint); `metering`
+(`gateway` | `provider`) is always present.
 
 **Allowed imports** (PRD §7 dependency rules): standard library, `client`,
 `auth`, `wire`.

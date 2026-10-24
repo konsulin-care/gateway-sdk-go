@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # Throwaway gateway e2e harness for gateway-sdk-go.
 #
-# Boots the pinned private ghcr gateway image with per-run ephemeral config
-# (fresh Ed25519 signing keys, generated operator login, dummy Xendit values,
-# container-internal temp SQLite), waits for GET /health, then removes the
-# container. Never targets production: only a local throwaway container is
-# ever started.
+# Boots the private ghcr gateway image with per-run ephemeral config
+# (fresh Ed25519 signing keys, generated operator login, ephemeral admin
+# TOTP secret, dummy Xendit values, container-internal temp SQLite), waits
+# for GET /health, then removes the container. Never targets production: only
+# a local throwaway container is ever started.
 #
 # Usage: bash scripts/e2e-gateway.sh [--start | --health | --stop | --smoke]
-#   --start  pull the pinned image and start the throwaway gateway
+#   --start  pull the gateway image and start the throwaway gateway
 #   --health GET /health on the running container (expects 200)
 #   --stop   remove the container
 #   --smoke  --start + --health + --stop, container removed even on failure
 #            (default)
 #
 # Env:
-#   GATEWAY_IMAGE  image ref (default ghcr.io/konsulin-care/konsulin-gateway:v0.1.1;
+#   GATEWAY_IMAGE  image ref (default ghcr.io/konsulin-care/konsulin-gateway:latest;
 #                  a local build alias konsulin-gateway:<tag> is also accepted)
 #   E2E_PORT       host port published to the container (default 18080)
 #
@@ -27,7 +27,7 @@ set -euo pipefail
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$REPO_ROOT"
 
-GATEWAY_IMAGE="${GATEWAY_IMAGE:-ghcr.io/konsulin-care/konsulin-gateway:v0.1.1}"
+GATEWAY_IMAGE="${GATEWAY_IMAGE:-ghcr.io/konsulin-care/konsulin-gateway:latest}"
 E2E_PORT="${E2E_PORT:-18080}"
 CONTAINER_NAME="gateway-sdk-e2e"
 HEALTH_URL="http://127.0.0.1:${E2E_PORT}/health"
@@ -77,12 +77,16 @@ start() {
       ;;
   esac
 
-  local gateway_key admin_key operator_hash xendit_token xendit_callback_token
+  local gateway_key admin_key operator_hash xendit_token xendit_callback_token totp_secret
   gateway_key=$(gen_ed25519_b64)
   admin_key=$(gen_ed25519_b64)
   [ -n "$gateway_key" ] && [ -n "$admin_key" ] || die "openssl produced no signing key"
   [ "$gateway_key" != "$admin_key" ] || die "gateway and admin signing keys must be distinct"
-  operator_hash=$(htpasswd -bnBC 10 "" "test-operator-pass-$(openssl rand -hex 8)" 2>/dev/null | tr -d ':\n')
+  # 20 random bytes -> 32 unpadded base32 chars, the seed form the gateway's
+  # parseTOTPSeed accepts (RFC 4648, no padding); a malformed seed fails its boot.
+  totp_secret=$(openssl rand 20 | base32 | tr -d '\n')
+  [ -n "$totp_secret" ] || die "openssl produced no TOTP secret"
+  operator_hash=$(htpasswd -bnBC 12 "" "test-operator-pass-$(openssl rand -hex 8)" 2>/dev/null | tr -d ':\n')
   [ -n "$operator_hash" ] || die "htpasswd produced no bcrypt hash"
   xendit_token=$(openssl rand -hex 32)
   xendit_callback_token=$(openssl rand -hex 32)
@@ -98,6 +102,7 @@ start() {
     -e "APP_GATEWAY_SIGNING_KEY=${gateway_key}" \
     -e "APP_ADMIN_SIGNING_KEY=${admin_key}" \
     -e "APP_OPERATOR_CREDENTIALS=operator:${operator_hash}" \
+    -e "APP_ADMIN_TOTP_SECRET=${totp_secret}" \
     "$GATEWAY_IMAGE" >/dev/null
 
   wait_healthy

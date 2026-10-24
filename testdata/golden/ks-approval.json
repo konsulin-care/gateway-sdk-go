@@ -1,0 +1,15 @@
+{
+  "name": "ks-approval",
+  "claims": {
+    "aud": "pty-golden-recipient",
+    "exp": 1767226500,
+    "iat": 1767225600,
+    "iss": "gateway",
+    "jti": "jti-golden-approval",
+    "purpose": "referral",
+    "researcher_hash": "N/A",
+    "scope": "referral",
+    "sub": "pty-golden-sender"
+  },
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1hcHByb3ZhbCtqd3QifQ.eyJhdWQiOiJwdHktZ29sZGVuLXJlY2lwaWVudCIsImV4cCI6MTc2NzIyNjUwMCwiaWF0IjoxNzY3MjI1NjAwLCJpc3MiOiJnYXRld2F5IiwianRpIjoianRpLWdvbGRlbi1hcHByb3ZhbCIsInB1cnBvc2UiOiJyZWZlcnJhbCIsInJlc2VhcmNoZXJfaGFzaCI6Ik4vQSIsInNjb3BlIjoicmVmZXJyYWwiLCJzdWIiOiJwdHktZ29sZGVuLXNlbmRlciJ9.R6DMxhAdQYzWogJO7V4imkC49wIE82rPsbxSOCDtsgygJQzA1xtpV5ordtdfXNfWek94oTqfkrOW-jpLptftDg"
+}

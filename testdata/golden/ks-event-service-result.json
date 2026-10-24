@@ -1,0 +1,15 @@
+{
+  "name": "ks-event-service-result",
+  "claims": {
+    "aud": "pty-golden-provider",
+    "body_sha256": "2OhnXrBEHRN004-EXvYHObSsZB0-e5gkTdLPP1HlITE",
+    "exp": 1767226500,
+    "iat": 1767225600,
+    "iss": "gateway",
+    "purpose": "service-result",
+    "sub": "gateway",
+    "webhook_id": "wh-golden-service-result"
+  },
+  "body": "{\"result_id\":\"res-golden\",\"status\":\"succeeded\"}",
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1ldmVudCtqd3QifQ.eyJhdWQiOiJwdHktZ29sZGVuLXByb3ZpZGVyIiwiYm9keV9zaGEyNTYiOiIyT2huWHJCRUhSTjAwNC1FWHZZSE9iU3NaQjAtZTVna1RkTFBQMUhsSVRFIiwiZXhwIjoxNzY3MjI2NTAwLCJpYXQiOjE3NjcyMjU2MDAsImlzcyI6ImdhdGV3YXkiLCJwdXJwb3NlIjoic2VydmljZS1yZXN1bHQiLCJzdWIiOiJnYXRld2F5Iiwid2ViaG9va19pZCI6IndoLWdvbGRlbi1zZXJ2aWNlLXJlc3VsdCJ9.UfLfdKEd07C3QWItWZyD-D82eNzheN5I9qrba31Gp7qumwTNqiJ2Et-8cSUx2wYP6B63eIwcRwvcxvKk1GLuCg"
+}

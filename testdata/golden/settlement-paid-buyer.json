@@ -1,0 +1,15 @@
+{
+  "name": "settlement-paid-buyer",
+  "claims": {
+    "aud": "party-buyer",
+    "body_sha256": "4VjR3MgrX4ycFODU348CH9Fwes0XnLyCOYl_3U0h6us",
+    "exp": 1767226500,
+    "iat": 1767225600,
+    "iss": "gateway",
+    "purpose": "settlement-notification",
+    "sub": "gateway",
+    "webhook_id": "wh-golden-paid-buyer"
+  },
+  "body": "{\"payment_id\":\"pay-golden-paid-buyer\",\"status\":\"paid\"}",
+  "jwt": "eyJhbGciOiJFZERTQSIsImtpZCI6IlVLZFFobWZvRGZtUW9BNVUzcDZFQUNlRS01aUhYVXQ2eTRuZjI4SVdSbVUiLCJ0eXAiOiJrcy1ldmVudCtqd3QifQ.eyJhdWQiOiJwYXJ0eS1idXllciIsImJvZHlfc2hhMjU2IjoiNFZqUjNNZ3JYNHljRk9EVTM0OENIOUZ3ZXMwWG5MeUNPWWxfM1UwaDZ1cyIsImV4cCI6MTc2NzIyNjUwMCwiaWF0IjoxNzY3MjI1NjAwLCJpc3MiOiJnYXRld2F5IiwicHVycG9zZSI6InNldHRsZW1lbnQtbm90aWZpY2F0aW9uIiwic3ViIjoiZ2F0ZXdheSIsIndlYmhvb2tfaWQiOiJ3aC1nb2xkZW4tcGFpZC1idXllciJ9.mUjDySUpSl1hWJtvbWM9mo_rwMmXCB4Sr6j3NCAmNaHsjJYgy3HqqSIdfXdVHKDeF7IdeVesfxUZkE6mSihpDQ"
+}

@@ -1,0 +1,17 @@
+{
+  "gateway_commit": "e93314fd0dce449a0581c1a2849e1d2f25e9e19c",
+  "files": {
+    "gateway-jwks.json": "5be1606a60ee1725e309d5ad8e7f9456537ba8a57c0ac64df74c56090da777e0",
+    "ks-access.json": "49533482dbb3c1af8e836461932d5a9483c98252eec0f19e99e1129bf3c45c23",
+    "ks-approval.json": "44e0d26d4d3233f554c1bb10f2ca9e559028d402a8e2bee686cd44dded92fcac",
+    "ks-delivery.json": "a6ab7d0673725066b76a14b17c38263552536e5a97d3f512279d9af129ceae26",
+    "ks-event-service-result.json": "2e2815cedcdb544cc116cbc0e63f455fac43338b3a29a6e32794f86588e8b72a",
+    "ks-party.json": "6a8aa51c266423c64c39283bd77af820a6389ebc79bfb8ef8c59aa33235e6d3d",
+    "ks-result.json": "e221edeace7669e0a8ff527501c843a314d839a90ccf024ffd0ac1e1be186658",
+    "settlement-expired-buyer.json": "165c21f59d5af4716496c14ce3891b81d8550edae777cb00b102d56c0cb4bb82",
+    "settlement-expired-provider.json": "e6d990be91d45c10d704c8c8f6c5c123c0736e57dc1ddd739832033234c7a26e",
+    "settlement-paid-buyer.json": "b7bb20f09c325edfd7455b92f37290f78e62cc2af2af4ee8bb6159924170a1fd",
+    "settlement-paid-provider.json": "ed7ff6d04aab3566143a3fe0c243c2b00e8ba9f3bb721d8a861ef889c80e3450",
+    "testonly-party-private.key": "5a7a0762f09c032d40420d44dabfdc00c750acc58f70c93fdd3892c86452fcd5"
+  }
+}
