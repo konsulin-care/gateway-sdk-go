@@ -1,0 +1,288 @@
+package envelope
+
+import (
+	"crypto/ecdh"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// RFC 7748 section 6.1 X25519 Diffie-Hellman vector: Alice's and Bob's
+// static key pairs (hex) and the published shared secret. RFC 8037
+// Appendix A.6 performs exactly this X25519 agreement inside its ECDH-ES
+// JWE example; the A.6 JOSE-wrapped constants are deliberately not
+// pinned because no authoritative copy is vendored in this repository
+// (the agreement step is pinned to RFC 7748 instead, and the ECDH-ES
+// composition is pinned by TestConcatKDFRFC7518AppendixC and the
+// envelope contract tests below).
+const (
+	rfc7748AlicePriv = "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"
+	rfc7748AlicePub  = "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
+	rfc7748BobPriv   = "5dab087e624a8a4b79e17f8b83800ee6f3bb1292618b6fd1c2f8b27ff88e0eb"
+	rfc7748BobPub    = "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"
+	rfc7748Shared    = "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
+)
+
+// x25519HexPrivate decodes a hex-encoded X25519 private scalar: RFC 7748
+// publishes its vectors in hex.
+func x25519HexPrivate(t *testing.T, h string) *ecdh.PrivateKey {
+	t.Helper()
+	raw, err := hex.DecodeString(h)
+	require.NoError(t, err)
+	key, err := ecdh.X25519().NewPrivateKey(raw)
+	require.NoError(t, err)
+	return key
+}
+
+// x25519HexPublic decodes a hex-encoded X25519 public key coordinate.
+func x25519HexPublic(t *testing.T, h string) *ecdh.PublicKey {
+	t.Helper()
+	raw, err := hex.DecodeString(h)
+	require.NoError(t, err)
+	key, err := ecdh.X25519().NewPublicKey(raw)
+	require.NoError(t, err)
+	return key
+}
+
+// TestX25519SharedSecretRFC7748Vector pins the X25519 key agreement that
+// the RFC 8037 Appendix A.6 ECDH-ES example performs to the canonical
+// published RFC 7748 section 6.1 vector: each published private scalar
+// derives the published public key, and the cross agreement equals the
+// published shared secret in both directions. It then composes the same
+// published keys through this package's envelope: a seal taking Alice's
+// key as the injected ephemeral carries Alice's published coordinate as
+// the protected epk and opens byte-identical with Bob's private key.
+func TestX25519SharedSecretRFC7748Vector(t *testing.T) {
+	alice := x25519HexPrivate(t, rfc7748AlicePriv)
+	assert.Equal(t, rfc7748AlicePub, hex.EncodeToString(alice.PublicKey().Bytes()),
+		"Alice's published scalar must derive her published public key")
+
+	bob := x25519HexPrivate(t, rfc7748BobPriv)
+	assert.Equal(t, rfc7748BobPub, hex.EncodeToString(bob.PublicKey().Bytes()),
+		"Bob's published scalar must derive his published public key")
+
+	z, err := alice.ECDH(x25519HexPublic(t, rfc7748BobPub))
+	require.NoError(t, err)
+	assert.Equal(t, rfc7748Shared, hex.EncodeToString(z),
+		"ECDH(Alice, Bob) must equal the RFC 7748 section 6.1 shared secret")
+
+	z2, err := bob.ECDH(x25519HexPublic(t, rfc7748AlicePub))
+	require.NoError(t, err)
+	assert.Equal(t, z, z2, "the X25519 agreement must be symmetric")
+
+	// Compose the published agreement through the envelope: Alice's key
+	// acts as the sender's ephemeral, Bob's as the recipient.
+	payload := []byte("rfc-pinned payload")
+	compact, err := seal(payload, "rfc-recipient", x25519HexPublic(t, rfc7748BobPub), alice)
+	require.NoError(t, err)
+
+	parts := strings.Split(compact, ".")
+	require.Len(t, parts, 5, "a compact JWE has five segments")
+	var header protectedHeader
+	require.NoError(t, json.Unmarshal(b64(t, parts[0]), &header))
+	assert.Equal(t, base64.RawURLEncoding.EncodeToString(x25519HexPublic(t, rfc7748AlicePub).Bytes()),
+		header.Epk.X, "the protected epk must carry the published ephemeral public key")
+
+	opened, err := Open(compact, bob)
+	require.NoError(t, err)
+	assert.Equal(t, payload, opened)
+}
+
+// TestConcatKDFRFC7518AppendixC asserts the SP 800-56A Concat KDF
+// (SHA-256) against the published RFC 7518 Appendix C vectors: the
+// A128GCM vector of the appendix (Z, AlgorithmID "A128GCM", PartyU
+// "Alice", PartyV "Bob", keydatalen 128) derives the published 16-byte
+// keying material. A KDF deviation is a test failure, never a runtime
+// fallback.
+func TestConcatKDFRFC7518AppendixC(t *testing.T) {
+	z := []byte{
+		158, 86, 217, 29, 129, 113, 53, 211, 114, 131, 66, 131, 191, 132,
+		38, 156, 251, 49, 110, 163, 218, 128, 106, 72, 246, 218, 167, 121,
+		140, 254, 144, 196,
+	}
+	want := []byte{
+		86, 170, 141, 234, 248, 35, 109, 32, 92, 34, 40, 205, 113, 167, 16, 26,
+	}
+	got := concatKDF(z, []byte("A128GCM"), []byte("Alice"), []byte("Bob"), 128)
+	assert.Equal(t, want, got, "RFC 7518 Appendix C Concat KDF vector must derive byte-exact")
+}
+
+// newRecipient generates a recipient X25519 use:enc key pair for tests.
+func newRecipient(t *testing.T) *ecdh.PrivateKey {
+	t.Helper()
+	key, err := ecdh.X25519().GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	return key
+}
+
+// b64 decodes a base64url (unpadded) string for test assertions.
+func b64(t *testing.T, s string) []byte {
+	t.Helper()
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	require.NoError(t, err)
+	return raw
+}
+
+// headerJSON re-encodes a modified protected header over the given
+// segments so malformed-envelope cases can be built precisely.
+func headerJSON(t *testing.T, hdr map[string]any, iv, ct, tag string) string {
+	t.Helper()
+	raw, err := json.Marshal(hdr)
+	require.NoError(t, err)
+	return strings.Join([]string{
+		base64.RawURLEncoding.EncodeToString(raw), "", iv, ct, tag,
+	}, ".")
+}
+
+// TestSealContractHeaderAndSegments asserts the sealed token matches the
+// normative JWE Envelope: five segments, an empty encrypted-key segment,
+// a protected header with alg ECDH-ES, enc A256GCM, the recipient kid,
+// and an OKP/X25519 epk, a 12-byte IV, a 16-byte tag, and a byte-exact
+// Open round trip.
+func TestSealContractHeaderAndSegments(t *testing.T) {
+	recipient := newRecipient(t)
+	payload := []byte(`{"amount":100}`)
+
+	compact, err := Seal(payload, "recipient-kid", recipient.PublicKey())
+	require.NoError(t, err)
+
+	parts := strings.Split(compact, ".")
+	require.Len(t, parts, 5, "a compact JWE has five segments")
+	assert.Empty(t, parts[1], "the encrypted-key segment must be empty (ECDH-ES direct)")
+
+	var header protectedHeader
+	require.NoError(t, json.Unmarshal(b64(t, parts[0]), &header))
+	assert.Equal(t, "ECDH-ES", header.Alg)
+	assert.Equal(t, "A256GCM", header.Enc)
+	assert.Equal(t, "recipient-kid", header.Kid)
+	assert.Equal(t, "OKP", header.Epk.Kty)
+	assert.Equal(t, "X25519", header.Epk.Crv)
+	assert.Len(t, b64(t, header.Epk.X), 32, "epk.x is a 32-byte X25519 coordinate")
+
+	assert.Len(t, b64(t, parts[2]), 12, "the IV is 12 bytes")
+	assert.Len(t, b64(t, parts[4]), 16, "the tag is 16 bytes")
+
+	opened, err := Open(compact, recipient)
+	require.NoError(t, err)
+	assert.Equal(t, payload, opened)
+}
+
+// TestSealFreshEphemeralPerMessage asserts two seals of the same payload
+// to the same recipient differ (fresh ephemeral epk and IV per message)
+// yet both open to the original payload.
+func TestSealFreshEphemeralPerMessage(t *testing.T) {
+	recipient := newRecipient(t)
+	payload := []byte("same payload")
+
+	first, err := Seal(payload, "kid", recipient.PublicKey())
+	require.NoError(t, err)
+	second, err := Seal(payload, "kid", recipient.PublicKey())
+	require.NoError(t, err)
+	assert.NotEqual(t, first, second, "two seals of one payload must differ (fresh epk/IV)")
+
+	for _, compact := range []string{first, second} {
+		opened, err := Open(compact, recipient)
+		require.NoError(t, err)
+		assert.Equal(t, payload, opened)
+	}
+}
+
+// TestOpenRejectsMalformedEnvelope asserts every malformed shape is
+// rejected with a nil plaintext before any plaintext is produced.
+func TestOpenRejectsMalformedEnvelope(t *testing.T) {
+	recipient := newRecipient(t)
+	compact, err := Seal([]byte("payload"), "kid", recipient.PublicKey())
+	require.NoError(t, err)
+	parts := strings.Split(compact, ".")
+	iv, ct, tag := parts[2], parts[3], parts[4]
+
+	validEpkX := base64.RawURLEncoding.EncodeToString(x25519HexPublic(t, rfc7748AlicePub).Bytes())
+	goodEpk := map[string]any{"kty": "OKP", "crv": "X25519", "x": validEpkX}
+	base := map[string]any{"alg": "ECDH-ES", "enc": "A256GCM", "kid": "kid", "epk": goodEpk}
+	mod := func(kv map[string]any) map[string]any {
+		out := map[string]any{}
+		for k, v := range base {
+			out[k] = v
+		}
+		for k, v := range kv {
+			out[k] = v
+		}
+		return out
+	}
+
+	cases := []struct{ name, compact string }{
+		{"four segments", strings.Join(parts[:4], ".")},
+		{"six segments", compact + ".extra"},
+		{"non-empty encrypted key", strings.Join([]string{parts[0], "ZQ", iv, ct, tag}, ".")},
+		{"header not base64", "@@@." + strings.Join(parts[1:], ".")},
+		{"header not json", base64.RawURLEncoding.EncodeToString([]byte("nope")) + "." + strings.Join(parts[1:], ".")},
+		{"wrong alg", headerJSON(t, mod(map[string]any{"alg": "ECDH-ES+A256GCM"}), iv, ct, tag)},
+		{"wrong enc", headerJSON(t, mod(map[string]any{"enc": "A128GCM"}), iv, ct, tag)},
+		{"missing kid", headerJSON(t, mod(map[string]any{"kid": ""}), iv, ct, tag)},
+		{"epk not OKP", headerJSON(t, mod(map[string]any{"epk": map[string]any{"kty": "EC", "crv": "P-256", "x": validEpkX}}), iv, ct, tag)},
+		{"epk wrong crv", headerJSON(t, mod(map[string]any{"epk": map[string]any{"kty": "OKP", "crv": "Ed25519", "x": validEpkX}}), iv, ct, tag)},
+		{"epk bad x", headerJSON(t, mod(map[string]any{"epk": map[string]any{"kty": "OKP", "crv": "X25519", "x": "AAAA"}}), iv, ct, tag)},
+		{"short IV", headerJSON(t, base, base64.RawURLEncoding.EncodeToString(b64(t, iv)[:11]), ct, tag)},
+		{"short tag", headerJSON(t, base, iv, ct, base64.RawURLEncoding.EncodeToString(b64(t, tag)[:15]))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plaintext, err := Open(tc.compact, recipient)
+			assert.Error(t, err)
+			assert.Nil(t, plaintext, "a rejected envelope must return nil plaintext")
+		})
+	}
+
+	t.Run("nil Decrypter", func(t *testing.T) {
+		plaintext, err := Open(compact, nil)
+		assert.Error(t, err)
+		assert.Nil(t, plaintext)
+	})
+}
+
+// TestOpenRejectsTamperedCiphertext asserts a flipped bit in the
+// ciphertext, the tag, or the protected header each fails
+// authentication with a nil plaintext.
+func TestOpenRejectsTamperedCiphertext(t *testing.T) {
+	recipient := newRecipient(t)
+	payload := []byte("sensitive payload")
+	compact, err := Seal(payload, "kid", recipient.PublicKey())
+	require.NoError(t, err)
+	parts := strings.Split(compact, ".")
+
+	flip := func(segment string) string {
+		raw := b64(t, segment)
+		raw[0] ^= 0x01
+		return base64.RawURLEncoding.EncodeToString(raw)
+	}
+
+	tamperedCT := strings.Join([]string{parts[0], parts[1], parts[2], flip(parts[3]), parts[4]}, ".")
+	tamperedTag := strings.Join([]string{parts[0], parts[1], parts[2], parts[3], flip(parts[4])}, ".")
+
+	var header protectedHeader
+	require.NoError(t, json.Unmarshal(b64(t, parts[0]), &header))
+	header.Kid = "other-kid"
+	tamperedHdrRaw, err := json.Marshal(header)
+	require.NoError(t, err)
+	tamperedHdr := strings.Join([]string{
+		base64.RawURLEncoding.EncodeToString(tamperedHdrRaw), parts[1], parts[2], parts[3], parts[4],
+	}, ".")
+
+	for _, tc := range []struct{ name, compact string }{
+		{"tampered ciphertext", tamperedCT},
+		{"tampered tag", tamperedTag},
+		{"tampered header", tamperedHdr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plaintext, err := Open(tc.compact, recipient)
+			assert.Error(t, err)
+			assert.Nil(t, plaintext, "a tampered envelope must return nil plaintext")
+		})
+	}
+}
