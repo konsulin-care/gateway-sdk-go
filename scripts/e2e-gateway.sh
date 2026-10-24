@@ -82,7 +82,7 @@ start() {
   admin_key=$(gen_ed25519_b64)
   [ -n "$gateway_key" ] && [ -n "$admin_key" ] || die "openssl produced no signing key"
   [ "$gateway_key" != "$admin_key" ] || die "gateway and admin signing keys must be distinct"
-  operator_hash=$(htpasswd -bnBC 10 "" "test-operator-pass-$(openssl rand -hex 8)" 2>/dev/null | tr -d ':\n')
+  operator_hash=$(htpasswd -bnBC 12 "" "test-operator-pass-$(openssl rand -hex 8)" 2>/dev/null | tr -d ':\n')
   [ -n "$operator_hash" ] || die "htpasswd produced no bcrypt hash"
   xendit_token=$(openssl rand -hex 32)
   xendit_callback_token=$(openssl rand -hex 32)
