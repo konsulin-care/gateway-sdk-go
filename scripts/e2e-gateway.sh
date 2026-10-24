@@ -2,10 +2,10 @@
 # Throwaway gateway e2e harness for gateway-sdk-go.
 #
 # Boots the private ghcr gateway image with per-run ephemeral config
-# (fresh Ed25519 signing keys, generated operator login, dummy Xendit values,
-# container-internal temp SQLite), waits for GET /health, then removes the
-# container. Never targets production: only a local throwaway container is
-# ever started.
+# (fresh Ed25519 signing keys, generated operator login, ephemeral admin
+# TOTP secret, dummy Xendit values, container-internal temp SQLite), waits
+# for GET /health, then removes the container. Never targets production: only
+# a local throwaway container is ever started.
 #
 # Usage: bash scripts/e2e-gateway.sh [--start | --health | --stop | --smoke]
 #   --start  pull the gateway image and start the throwaway gateway
@@ -77,11 +77,15 @@ start() {
       ;;
   esac
 
-  local gateway_key admin_key operator_hash xendit_token xendit_callback_token
+  local gateway_key admin_key operator_hash xendit_token xendit_callback_token totp_secret
   gateway_key=$(gen_ed25519_b64)
   admin_key=$(gen_ed25519_b64)
   [ -n "$gateway_key" ] && [ -n "$admin_key" ] || die "openssl produced no signing key"
   [ "$gateway_key" != "$admin_key" ] || die "gateway and admin signing keys must be distinct"
+  # 20 random bytes -> 32 unpadded base32 chars, the seed form the gateway's
+  # parseTOTPSeed accepts (RFC 4648, no padding); a malformed seed fails its boot.
+  totp_secret=$(openssl rand 20 | base32 | tr -d '\n')
+  [ -n "$totp_secret" ] || die "openssl produced no TOTP secret"
   operator_hash=$(htpasswd -bnBC 12 "" "test-operator-pass-$(openssl rand -hex 8)" 2>/dev/null | tr -d ':\n')
   [ -n "$operator_hash" ] || die "htpasswd produced no bcrypt hash"
   xendit_token=$(openssl rand -hex 32)
@@ -98,6 +102,7 @@ start() {
     -e "APP_GATEWAY_SIGNING_KEY=${gateway_key}" \
     -e "APP_ADMIN_SIGNING_KEY=${admin_key}" \
     -e "APP_OPERATOR_CREDENTIALS=operator:${operator_hash}" \
+    -e "APP_ADMIN_TOTP_SECRET=${totp_secret}" \
     "$GATEWAY_IMAGE" >/dev/null
 
   wait_healthy
