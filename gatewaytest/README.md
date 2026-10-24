@@ -13,16 +13,19 @@ packages (including `internal/*` where a fake must mint real tokens).
 
 **Related requirements**: SDK-TEST-001, SDK-TEST-002.
 
-**Planned files**:
+**Files**:
+- `doc.go` — package doc
 - `fixtures.go` — golden-vector fixture loader
 - `manifest.go` — `MANIFEST.json` loader/verifier (fail closed, ADR-004)
-- `server.go` — fake gateway `httptest` server
+- `server.go` — fake gateway JWKS `httptest` server
 - `minter.go` — token minter with a generated test key
-- `replay.go` — deterministic `ReplayCache`
-- extended in phase 3: fake handlers per §9.6 route
+- `replay.go` — deterministic `ReplayCache`; satisfies `verify.ReplayCache`
+  (asserted in `replay_test.go`, so non-test `gatewaytest` never imports
+  `verify`)
 - tests split per unit: `golden_test.go`, `fixtures_test.go`,
   `jwksserver_test.go`, `minter_test.go`, `replay_test.go`,
   `manifest_test.go` (each ≤ 300 lines)
+- planned in phase 3: fake handlers per §9.6 route
 
 **Built by**: `docs/tasks/01-foundation-test-kit.md` (v1), extended in
 `docs/tasks/03-client-and-routes.md`.

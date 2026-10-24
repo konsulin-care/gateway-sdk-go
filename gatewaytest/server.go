@@ -124,7 +124,7 @@ func (s *JWKSServer) Verify(token string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gatewaytest: verify: %w", err)
 	}
-	key, ok := s.keys.ByKid(hdr.Kid)
+	key, ok := s.keys.SigByKid(hdr.Kid)
 	if !ok {
 		return nil, fmt.Errorf("gatewaytest: verify: unknown kid %q", hdr.Kid)
 	}
