@@ -105,7 +105,12 @@ fi
 
 if $RUN_SECRET; then
   echo "==> secrets"
-  secret_re='(password|secret|pepper|private\.key)[[:space:]]*[:=]'
+  # Literal-value form (M2): a quote must directly follow the ':'/'=' operator
+  # run, so a genuine assignment such as `secret := "..."` or `pepper = "..."`
+  # still trips the gate, while doc labels ("- pepper:"), range loops
+  # ("pepper := range") and identifier suffixes ("testPepper = []byte(...)")
+  # no longer match.
+  secret_re='(password|secret|pepper|private\.key)["'"'"']?[[:space:]]*[:=]+[[:space:]]*["'"'"'`]'
   if [ "$QC_SCOPE" = "staged" ]; then
     if git diff --cached --diff-filter=ACM -- '*.go' | grep -inE "$secret_re"; then
       echo "Potential secret in staged files"
