@@ -179,3 +179,32 @@ func WithReplayRetention(retention time.Duration) Option {
 		return nil
 	}
 }
+
+// defaultMaxBodyBytes is the default cap on a callback request body: 1 MiB,
+// overridable with WithMaxBodyBytes.
+const defaultMaxBodyBytes = 1 << 20 // 1 MiB
+
+// middlewareConfig holds the callback middleware options, so option order
+// never affects the defaults of options not set.
+type middlewareConfig struct {
+	maxBodyBytes int64
+}
+
+// MiddlewareOption configures the callback middleware built by Middleware.
+type MiddlewareOption func(*middlewareConfig)
+
+// WithMaxBodyBytes sets the cap on the request body the middleware buffers
+// in one pass through http.MaxBytesReader (default 1 MiB). A body over the
+// cap denies with 413 before any token work, so an oversized payload never
+// reaches verification or the handler.
+//
+// Parameters: n is the cap in bytes; a non-positive n keeps the current
+// value (the 1 MiB default), so the option can never disable the cap.
+// Returns: a MiddlewareOption applying it.
+func WithMaxBodyBytes(n int64) MiddlewareOption {
+	return func(cfg *middlewareConfig) {
+		if n > 0 {
+			cfg.maxBodyBytes = n
+		}
+	}
+}
