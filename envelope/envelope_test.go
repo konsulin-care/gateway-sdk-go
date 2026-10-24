@@ -1,6 +1,7 @@
 package envelope
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
@@ -297,5 +298,97 @@ func TestOpenRejectsTamperedCiphertext(t *testing.T) {
 			assert.Error(t, err)
 			assert.Nil(t, plaintext, "a tampered envelope must return nil plaintext")
 		})
+	}
+}
+
+// pepperShapedPayload returns a deterministic 32-byte payload in the shape
+// of the federation pepper (the concrete value a party opens an envelope
+// for), so round-trip and tamper tests exercise the exact size that matters.
+func pepperShapedPayload() []byte {
+	out := make([]byte, 32)
+	for i := range out {
+		out[i] = byte(i*7 + 1)
+	}
+	return out
+}
+
+// TestSealOpenRoundTripByteIdentical asserts the SDK-ENV-C01 round trip is
+// byte-identical for the three payload shapes that matter: an empty
+// payload, a 32-byte pepper-shaped payload, and a large (1 MiB) payload.
+// Each payload seals to a compact JWE and opens back to exactly the bytes
+// that were sealed — no truncation, no padding, no mutation at any size.
+func TestSealOpenRoundTripByteIdentical(t *testing.T) {
+	recipient := newRecipient(t)
+
+	large := make([]byte, 1<<20)
+	for i := range large {
+		large[i] = byte(i % 251)
+	}
+
+	cases := []struct {
+		name    string
+		payload []byte
+	}{
+		{"empty", []byte{}},
+		{"32-byte pepper-shaped", pepperShapedPayload()},
+		{"large 1 MiB", large},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			compact, err := Seal(tc.payload, "round-trip-kid", recipient.PublicKey())
+			require.NoError(t, err)
+
+			opened, err := Open(compact, recipient)
+			require.NoError(t, err)
+			assert.Equal(t, len(tc.payload), len(opened),
+				"the round trip must return exactly as many bytes as were sealed")
+			assert.True(t, bytes.Equal(tc.payload, opened),
+				"seal then open must be byte-identical for a %s payload", tc.name)
+		})
+	}
+}
+
+// TestSealOpenTamperFails asserts the SDK-ENV-C01 deny half exhaustively:
+// flipping ANY single bit of the ciphertext or of the authentication tag
+// fails Open with a nil plaintext. Every byte of both segments is walked
+// across all eight bit positions against a 32-byte (pepper-shaped)
+// payload, one bit changed per attempt relative to the original token.
+func TestSealOpenTamperFails(t *testing.T) {
+	recipient := newRecipient(t)
+	payload := pepperShapedPayload()
+	compact, err := Seal(payload, "tamper-kid", recipient.PublicKey())
+	require.NoError(t, err)
+	parts := strings.Split(compact, ".")
+	require.Len(t, parts, 5, "a compact JWE has five segments")
+	origCT, origTag := parts[3], parts[4]
+
+	segments := []struct {
+		name  string
+		index int
+		orig  string
+	}{
+		{"ciphertext", 3, origCT},
+		{"tag", 4, origTag},
+	}
+	for _, seg := range segments {
+		raw := b64(t, seg.orig)
+		require.NotEmpty(t, raw)
+		for i := range raw {
+			for bit := 0; bit < 8; bit++ {
+				mutated := append([]byte(nil), raw...)
+				mutated[i] ^= 1 << bit
+
+				mutatedParts := []string{parts[0], parts[1], parts[2], origCT, origTag}
+				mutatedParts[seg.index] = base64.RawURLEncoding.EncodeToString(mutated)
+				tampered := strings.Join(mutatedParts, ".")
+
+				plaintext, err := Open(tampered, recipient)
+				assert.Error(t, err,
+					"flipping bit %d of byte %d of the %s must fail Open", bit, i, seg.name)
+				assert.Nil(t, plaintext,
+					"a tampered envelope must return nil plaintext (bit %d of byte %d of the %s)",
+					bit, i, seg.name)
+			}
+		}
 	}
 }
