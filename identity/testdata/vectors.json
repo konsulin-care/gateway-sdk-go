@@ -1,0 +1,55 @@
+{
+  "description": "SDK-ID-C01 shared identity hash vectors (gateway hashfmt): HMAC-SHA256 of the normalized value keyed by pepper, rendered as standard base64 of exactly 32 bytes, or the literal N/A marker when the field is not applicable (input empty). The pepper pinned here is the fixed TEST pepper; production peppers are caller-held and never committed. The backend adapter mirrors these rows.",
+  "pepper": "0123456789abcdef0123456789abcdef",
+  "vectors": [
+    {
+      "name": "email trims and lowercases",
+      "field": "email",
+      "input": " A@B.com ",
+      "normalized": "a@b.com",
+      "expected": "OCHyfcQ52LhI09YJair2gq689eGJKYijThm6JdHQEZ4="
+    },
+    {
+      "name": "email mixed case domain",
+      "field": "email",
+      "input": "USER@Example.ORG",
+      "normalized": "user@example.org",
+      "expected": "EbT+QaW26tqhy96nGKCae7Q+HYiLeGhGUBtbCx6ipfs="
+    },
+    {
+      "name": "email not applicable",
+      "field": "email",
+      "input": "",
+      "normalized": "",
+      "expected": "N/A"
+    },
+    {
+      "name": "phone e164 formatted",
+      "field": "phone",
+      "input": "+62 812-3456-7890",
+      "normalized": "6281234567890",
+      "expected": "rwTOffdKRjgb1yvv2d9OPczrfnwaAmzDNapumDFMfpE="
+    },
+    {
+      "name": "phone e164 bare",
+      "field": "phone",
+      "input": "6281234567890",
+      "normalized": "6281234567890",
+      "expected": "rwTOffdKRjgb1yvv2d9OPczrfnwaAmzDNapumDFMfpE="
+    },
+    {
+      "name": "phone us formatted",
+      "field": "phone",
+      "input": "+1 (212) 555-0123",
+      "normalized": "12125550123",
+      "expected": "JxsCiCh9WYetJHqLGZ5vA2E6lWNNevWdeSfcikkttIg="
+    },
+    {
+      "name": "phone not applicable",
+      "field": "phone",
+      "input": "",
+      "normalized": "",
+      "expected": "N/A"
+    }
+  ]
+}

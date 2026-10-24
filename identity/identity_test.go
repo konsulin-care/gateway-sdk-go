@@ -4,6 +4,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -207,6 +209,76 @@ func TestHashFormatValidationRejectsMalformed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Error(t, identity.ValidateHash(tc.value), "%q must be rejected fail-closed", tc.value)
 			assert.False(t, identity.Equal(tc.value, identity.NAMarker), "a malformed value must never equal the marker")
+		})
+	}
+}
+
+// sharedVectors is the on-disk shape of identity/testdata/vectors.json: the
+// fixed test pepper plus the shared input-to-expected-hash rows the backend
+// adapter mirrors (SDK-ID-C01).
+type sharedVectors struct {
+	Pepper  string      `json:"pepper"`
+	Vectors []sharedRow `json:"vectors"`
+}
+
+// sharedRow is one shared fixture vector: the raw identity input, its
+// normalized form (empty on the N/A rows), and the expected gateway hashfmt
+// value (the N/A marker or standard base64 of the 32-byte HMAC-SHA256).
+type sharedRow struct {
+	Name       string `json:"name"`
+	Field      string `json:"field"`
+	Input      string `json:"input"`
+	Normalized string `json:"normalized"`
+	Expected   string `json:"expected"`
+}
+
+// hashVector dispatches one fixture row to the matching identity hash
+// function under the fixed test pepper.
+func hashVector(field, input string) (string, error) {
+	if field == "email" {
+		return identity.HashEmail(input, testPepper)
+	}
+	return identity.HashPhone(input, testPepper)
+}
+
+// TestIdentitySharedFixtureVectors asserts SDK-ID-C01: every row of the
+// shared fixture vectors in identity/testdata/vectors.json — email rows,
+// phone rows, and the N/A marker cases — hashes byte-for-byte to its
+// expected value under the fixed test pepper pinned by the file. The
+// comparison is exact, so altering any input or expectation in the fixture
+// fails this test.
+func TestIdentitySharedFixtureVectors(t *testing.T) {
+	data, err := os.ReadFile("testdata/vectors.json")
+	require.NoError(t, err, "the shared fixture vectors must be committed")
+	var doc sharedVectors
+	require.NoError(t, json.Unmarshal(data, &doc), "vectors.json must be valid JSON")
+	require.Equal(t, string(testPepper), doc.Pepper, "the vectors pin the shared fixed test pepper")
+	require.NotEmpty(t, doc.Vectors, "the fixture must carry rows")
+
+	for _, row := range doc.Vectors {
+		t.Run(row.Name, func(t *testing.T) {
+			require.Contains(t, []string{"email", "phone"}, row.Field, "row field must be email or phone")
+			got, err := hashVector(row.Field, row.Input)
+			require.NoError(t, err, "a fixture row input must normalize, or be empty")
+			assert.Equal(t, row.Expected, got,
+				"row %q must hash byte-for-byte to its expected value", row.Name)
+			require.NoError(t, identity.ValidateHash(got), "every row value must satisfy hashfmt")
+			if row.Input == "" {
+				assert.Equal(t, identity.NAMarker, got, "an empty input is the N/A row")
+				assert.Empty(t, row.Normalized, "an N/A row carries no normalized value")
+				return
+			}
+			var wantNorm string
+			if row.Field == "email" {
+				wantNorm, err = identity.NormalizeEmail(row.Input)
+			} else {
+				wantNorm, err = identity.NormalizePhone(row.Input)
+			}
+			require.NoError(t, err)
+			assert.Equal(t, row.Normalized, wantNorm, "row %q must pin its normalized form", row.Name)
+			raw, err := base64.StdEncoding.DecodeString(got)
+			require.NoError(t, err)
+			assert.Len(t, raw, sha256.Size, "a hash row must be standard base64 of exactly 32 bytes")
 		})
 	}
 }
