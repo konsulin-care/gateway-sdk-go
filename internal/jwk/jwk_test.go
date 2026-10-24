@@ -1,6 +1,8 @@
 package jwk_test
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"os"
 	"testing"
 
@@ -31,6 +33,18 @@ const rfc7515AppendixA1JWK = `{
 	"kid": "74c0d034-c1b1-44f8-8df2-8f1c4b19b1e8"
 }`
 
+// x25519X is a fixed OKP/X25519 public coordinate (base64url, unpadded, 32
+// bytes) used as the use:enc key fixture in these tests.
+const x25519X = "3hy4vB5JnwFj4w2MHRvYKN-n6I8OFs7EVUrqF73tRk0"
+
+// x25519EncJWK is a valid encryption key fixture: use "enc" and alg "ECDH-ES"
+// exactly as the JWE Envelope contract requires of an X25519 recipient key.
+const x25519EncJWK = `{"alg":"ECDH-ES","crv":"X25519","kid":"enc-current","kty":"OKP","use":"enc","x":"` + x25519X + `"}`
+
+// ed25519SigJWK is a signing key fixture carrying the coordinate of the
+// mirrored gateway JWKS, reused as the sig half of the mixed sets below.
+const ed25519SigJWK = `{"alg":"EdDSA","crv":"Ed25519","kid":"sig-current","kty":"OKP","use":"sig","x":"iRjI0Qr9WRzkvTcY4bv8tAGPgBGrj83PSikHxaRFKyM"}`
+
 // TestRFC7638Section31Vector asserts the thumbprint of the RFC 7638 section 3.1
 // example JWK equals the published value verbatim.
 func TestRFC7638Section31Vector(t *testing.T) {
@@ -46,6 +60,25 @@ func TestThumbprintECP256(t *testing.T) {
 	got, err := jwk.Thumbprint([]byte(rfc7515AppendixA1JWK))
 	require.NoError(t, err)
 	assert.Equal(t, "sxXPnpAh91l74LBB0I9ivWUQF31L6hri_vWWA50i0Yo", got)
+}
+
+// TestThumbprintX25519OverCRVKTYX asserts the RFC 7638 thumbprint of an
+// X25519 key is the SHA-256 of the canonical crv/kty/x form and nothing
+// else: use, alg, and kid never contribute to the digest.
+func TestThumbprintX25519OverCRVKTYX(t *testing.T) {
+	canonical := `{"crv":"X25519","kty":"OKP","x":"` + x25519X + `"}`
+	sum := sha256.Sum256([]byte(canonical))
+	want := base64.RawURLEncoding.EncodeToString(sum[:])
+
+	key, err := jwk.ParseKey([]byte(x25519EncJWK))
+	require.NoError(t, err)
+	got, err := key.Thumbprint()
+	require.NoError(t, err)
+	assert.Equal(t, want, got, "thumbprint must hash crv/kty/x only")
+
+	bare, err := jwk.Thumbprint([]byte(canonical))
+	require.NoError(t, err)
+	assert.Equal(t, want, bare)
 }
 
 // TestThumbprintRejectsMalformed asserts unsupported or incomplete JWKs fail
@@ -91,18 +124,23 @@ func TestParseGatewayJWKS(t *testing.T) {
 	assert.Equal(t, "UKdQhmfoDfmQoA5U3p6EACeE-5iHXUt6y4nf28IWRmU", key.Kid)
 	assert.Equal(t, key.Kid, thumbprint)
 
-	// Kid-only selection resolves the served key.
-	selected, ok := set.ByKid(key.Kid)
+	// Kid-only selection resolves the served signing key; the set holds no
+	// encryption key, so EncByKid resolves nothing at all.
+	selected, ok := set.SigByKid(key.Kid)
 	require.True(t, ok)
 	assert.Equal(t, key, selected)
-	_, ok = set.ByKid("unknown-kid")
+	_, ok = set.SigByKid("unknown-kid")
 	assert.False(t, ok)
-	_, ok = set.ByKid("")
+	_, ok = set.SigByKid("")
+	assert.False(t, ok)
+	_, ok = set.EncByKid(key.Kid)
+	assert.False(t, ok, "an Ed25519 sig key must never resolve through EncByKid")
+	_, ok = set.EncByKid("")
 	assert.False(t, ok)
 }
 
 // TestParseJWKSHoldsCurrentAndPrevious asserts a rotation-overlap JWKS retains
-// both the current and the previous key and selects each by kid only.
+// both the current and the previous signing key and selects each by kid.
 func TestParseJWKSHoldsCurrentAndPrevious(t *testing.T) {
 	const doc = `{
 		"keys": [
@@ -116,13 +154,86 @@ func TestParseJWKSHoldsCurrentAndPrevious(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, set.Keys, 2)
 
-	cur, ok := set.ByKid("current")
+	cur, ok := set.SigByKid("current")
 	require.True(t, ok)
 	assert.Equal(t, "iRjI0Qr9WRzkvTcY4bv8tAGPgBGrj83PSikHxaRFKyM", cur.X)
 
-	prev, ok := set.ByKid("previous")
+	prev, ok := set.SigByKid("previous")
 	require.True(t, ok)
 	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", prev.X)
+
+	for _, kid := range []string{"current", "previous"} {
+		_, ok = set.EncByKid(kid)
+		assert.False(t, ok, "kid %q must never resolve through EncByKid", kid)
+	}
+}
+
+// TestParseJWKSMixedSigAndEncKeys asserts a set holding an Ed25519 sig key and
+// an X25519 use:enc key parses, and that the two selectors never cross:
+// SigByKid only ever resolves signing keys, EncByKid only ever resolves
+// encryption keys, and an empty kid matches nothing on either selector.
+func TestParseJWKSMixedSigAndEncKeys(t *testing.T) {
+	const doc = `{"keys":[` + ed25519SigJWK + `,` + x25519EncJWK + `]}`
+	set, err := jwk.ParseJWKS([]byte(doc))
+	require.NoError(t, err)
+	require.Len(t, set.Keys, 2)
+
+	sig, ok := set.SigByKid("sig-current")
+	require.True(t, ok, "the Ed25519 sig key must resolve through SigByKid")
+	assert.Equal(t, "Ed25519", sig.Crv)
+
+	enc, ok := set.EncByKid("enc-current")
+	require.True(t, ok, "the X25519 use:enc key must resolve through EncByKid")
+	assert.Equal(t, "X25519", enc.Crv)
+	assert.Equal(t, "enc", enc.Use)
+
+	_, ok = set.SigByKid("enc-current")
+	assert.False(t, ok, "SigByKid must never return the X25519 key")
+	_, ok = set.EncByKid("sig-current")
+	assert.False(t, ok, "EncByKid must never return the Ed25519 key")
+	_, ok = set.SigByKid("unknown-kid")
+	assert.False(t, ok)
+	_, ok = set.EncByKid("unknown-kid")
+	assert.False(t, ok)
+	_, ok = set.SigByKid("")
+	assert.False(t, ok, "an empty kid must never match")
+	_, ok = set.EncByKid("")
+	assert.False(t, ok, "an empty kid must never match")
+}
+
+// TestParseKeyX25519UseEncOnly asserts OKP/X25519 keys parse only as
+// encryption keys: use must be "enc" and alg, when present, must be
+// "ECDH-ES"; anything else is rejected fail-closed, both per key and for
+// a whole set containing it.
+func TestParseKeyX25519UseEncOnly(t *testing.T) {
+	const body = `"crv":"X25519","kty":"OKP","x":"` + x25519X + `"`
+	accept := map[string]string{
+		"use enc, alg ECDH-ES": `{"alg":"ECDH-ES","use":"enc",` + body + `}`,
+		"use enc, alg absent":  `{"use":"enc",` + body + `}`,
+	}
+	for name, in := range accept {
+		t.Run(name, func(t *testing.T) {
+			key, err := jwk.ParseKey([]byte(in))
+			require.NoError(t, err)
+			assert.Equal(t, "X25519", key.Crv)
+			assert.Equal(t, "enc", key.Use)
+		})
+	}
+	reject := map[string]string{
+		"use absent":          `{` + body + `}`,
+		"use sig":             `{"use":"sig",` + body + `}`,
+		"alg EdDSA":           `{"alg":"EdDSA","use":"enc",` + body + `}`,
+		"alg ECDH-ES+A256GCM": `{"alg":"ECDH-ES+A256GCM","use":"enc",` + body + `}`,
+		"crv P-256 use enc":   `{"crv":"P-256","kty":"OKP","use":"enc","x":"` + x25519X + `"}`,
+	}
+	for name, in := range reject {
+		t.Run(name, func(t *testing.T) {
+			_, err := jwk.ParseKey([]byte(in))
+			assert.Error(t, err)
+			_, err = jwk.ParseJWKS([]byte(`{"keys":[` + in + `]}`))
+			assert.Error(t, err, "one rejected key must fail the whole set")
+		})
+	}
 }
 
 // TestParseKeyECP256 asserts an RFC 7515 Appendix A.1 EC key parses and its

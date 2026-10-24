@@ -8,7 +8,8 @@ import (
 
 // KeySet is a parsed JSON Web Key Set (RFC 7517 section 5). A set served by
 // the gateway holds the current signing key and, during rotation overlap, the
-// previous one as well; both are retained here and selected by kid only.
+// previous one as well; both are retained here and selected by kid only via
+// SigByKid, with X25519 use:enc recipient keys selected via EncByKid.
 type KeySet struct {
 	Keys []Key
 }
@@ -43,19 +44,48 @@ func ParseJWKS(data []byte) (KeySet, error) {
 	return KeySet{Keys: keys}, nil
 }
 
-// ByKid selects a key by kid only, never by alg or use.
+// SigByKid selects a signing key (OKP/Ed25519 or EC/P-256) by kid only,
+// never by alg or use. Encryption keys (OKP/X25519) never resolve here.
 //
 // Parameters: kid is the RFC 7638 thumbprint (or other kid) to look up.
-// Returns: the matching key and true, or the zero Key and false. An empty
-// kid never matches, so a key without a kid cannot be selected.
-func (s KeySet) ByKid(kid string) (Key, bool) {
+// Returns: the matching signing key and true, or the zero Key and false. An
+// empty kid never matches, so a key without a kid cannot be selected.
+func (s KeySet) SigByKid(kid string) (Key, bool) {
+	return s.selectBy(kid, isSigningKey)
+}
+
+// EncByKid selects an encryption key (OKP/X25519 with use "enc") by kid only.
+// Signing keys never resolve here.
+//
+// Parameters: kid is the RFC 7638 thumbprint (or other kid) to look up.
+// Returns: the matching encryption key and true, or the zero Key and false.
+// An empty kid never matches, so a key without a kid cannot be selected.
+func (s KeySet) EncByKid(kid string) (Key, bool) {
+	return s.selectBy(kid, isEncryptionKey)
+}
+
+// selectBy returns the first key with the given kid that satisfies the kind
+// predicate. An empty kid matches nothing.
+func (s KeySet) selectBy(kid string, kind func(Key) bool) (Key, bool) {
 	if kid == "" {
 		return Key{}, false
 	}
 	for _, key := range s.Keys {
-		if key.Kid == kid {
+		if key.Kid == kid && kind(key) {
 			return key, true
 		}
 	}
 	return Key{}, false
+}
+
+// isSigningKey reports whether a key is usable for signatures: OKP/Ed25519
+// or EC/P-256. X25519 encryption keys are excluded.
+func isSigningKey(k Key) bool {
+	return k.Crv == "Ed25519" || (k.Kty == "EC" && k.Crv == "P-256")
+}
+
+// isEncryptionKey reports whether a key is a JWE recipient key: OKP/X25519
+// carrying use "enc" (ParseKey enforces that policy for every X25519 key).
+func isEncryptionKey(k Key) bool {
+	return k.Kty == "OKP" && k.Crv == "X25519" && k.Use == "enc"
 }

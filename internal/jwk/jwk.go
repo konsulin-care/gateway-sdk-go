@@ -11,7 +11,8 @@ import (
 const pointSizeBytes = 32
 
 // Key is a parsed JWK (RFC 7517 section 2) for the only key types this SDK
-// accepts: OKP/Ed25519 and EC/P-256. Unknown members are ignored.
+// accepts: OKP/Ed25519 and EC/P-256 signing keys, plus OKP/X25519 keys used
+// as encryption keys only (use "enc"). Unknown members are ignored.
 type Key struct {
 	Kty string `json:"kty"`
 	Crv string `json:"crv"`
@@ -25,10 +26,11 @@ type Key struct {
 // ParseKey parses and validates a single JWK (RFC 7517 section 4).
 //
 // Parameters: data is the raw JSON encoding of one JWK.
-// Returns: the parsed Key and nil, or an error. Fail-closed: only OKP/Ed25519
-// and EC/P-256 keys parse; crv must match kty, x (and y for EC) must be
-// base64url (unpadded) strings decoding to exactly 32 bytes, and a present
-// alg must be EdDSA for OKP or ES256 for EC.
+// Returns: the parsed Key and nil, or an error. Fail-closed: only OKP/Ed25519,
+// OKP/X25519, and EC/P-256 keys parse; crv must match kty, x (and y for EC)
+// must be base64url (unpadded) strings decoding to exactly 32 bytes, and a
+// present alg must be EdDSA for OKP/Ed25519, ECDH-ES for OKP/X25519, or
+// ES256 for EC. An X25519 key additionally requires use "enc".
 func ParseKey(data []byte) (Key, error) {
 	var key Key
 	if err := json.Unmarshal(data, &key); err != nil {
@@ -65,16 +67,42 @@ func (k *Key) validate() error {
 	}
 }
 
-// validateOKP enforces the fail-closed rules for OKP/Ed25519 keys.
+// validateOKP enforces the fail-closed rules for OKP keys: Ed25519 for
+// signatures and X25519 as an encryption key only (use "enc").
 func (k *Key) validateOKP() error {
-	if k.Crv != "Ed25519" {
+	switch k.Crv {
+	case "Ed25519":
+		return k.validateEd25519()
+	case "X25519":
+		return k.validateX25519()
+	default:
 		return fmt.Errorf("jwk: OKP key: unsupported crv %q", k.Crv)
 	}
+}
+
+// validateEd25519 enforces the fail-closed rules for OKP/Ed25519 keys.
+func (k *Key) validateEd25519() error {
 	if err := decodeCoordinate(k.X); err != nil {
 		return fmt.Errorf("jwk: OKP key: %w", err)
 	}
 	if k.Alg != "" && k.Alg != "EdDSA" {
 		return fmt.Errorf("jwk: OKP key: alg %q does not match Ed25519", k.Alg)
+	}
+	return nil
+}
+
+// validateX25519 enforces the fail-closed rules for OKP/X25519 keys: they are
+// JWE recipient keys only, so use must be "enc" and a present alg must be
+// "ECDH-ES" (the JWE Envelope key-agreement algorithm).
+func (k *Key) validateX25519() error {
+	if k.Use != "enc" {
+		return fmt.Errorf("jwk: OKP/X25519 key: use must be %q, got %q", "enc", k.Use)
+	}
+	if k.Alg != "" && k.Alg != "ECDH-ES" {
+		return fmt.Errorf("jwk: OKP/X25519 key: alg %q does not match ECDH-ES", k.Alg)
+	}
+	if err := decodeCoordinate(k.X); err != nil {
+		return fmt.Errorf("jwk: OKP/X25519 key: %w", err)
 	}
 	return nil
 }
