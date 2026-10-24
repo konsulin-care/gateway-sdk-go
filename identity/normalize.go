@@ -44,7 +44,7 @@ func NormalizePhone(raw string) (string, error) {
 	var digits strings.Builder
 	for _, r := range strings.TrimSpace(raw) {
 		if r >= '0' && r <= '9' {
-			digits.WriteRune(r)
+			_, _ = digits.WriteRune(r)
 		}
 	}
 	normalized := digits.String()
