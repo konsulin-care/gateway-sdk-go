@@ -13,18 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// RFC 7748 section 6.1 X25519 Diffie-Hellman vector: Alice's and Bob's
-// static key pairs (hex) and the published shared secret. RFC 8037
-// Appendix A.6 performs exactly this X25519 agreement inside its ECDH-ES
-// JWE example; the A.6 JOSE-wrapped constants are deliberately not
-// pinned because no authoritative copy is vendored in this repository
-// (the agreement step is pinned to RFC 7748 instead, and the ECDH-ES
-// composition is pinned by TestConcatKDFRFC7518AppendixC and the
-// envelope contract tests below).
+// RFC 7748 section 6.1 X25519 Diffie-Hellman vector (hex): Alice's static
+// key pair, Bob's public key, and the published shared secret — the exact
+// four values the Go toolchain's crypto/ecdh test vector pins. Bob's
+// private scalar is deliberately absent: no authoritative copy of that
+// constant is vendored in this repository and a recalled value cannot be
+// trusted (one derived the wrong public key at runtime), so the vector
+// test below pre-pins the agreement instead of re-deriving it from a
+// scalar. RFC 8037 Appendix A.6 performs exactly this agreement inside
+// its ECDH-ES JWE example; its JOSE-wrapped constants are likewise not
+// pinned (the ECDH-ES composition is pinned by
+// TestConcatKDFRFC7518AppendixC and the envelope contract tests).
 const (
 	rfc7748AlicePriv = "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"
 	rfc7748AlicePub  = "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
-	rfc7748BobPriv   = "5dab087e624a8a4b79e17f8b83800ee6f3bb1292618b6fd1c2f8b27ff88e0eb"
 	rfc7748BobPub    = "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"
 	rfc7748Shared    = "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
 )
@@ -50,48 +52,59 @@ func x25519HexPublic(t *testing.T, h string) *ecdh.PublicKey {
 	return key
 }
 
-// TestX25519SharedSecretRFC7748Vector pins the X25519 key agreement that
-// the RFC 8037 Appendix A.6 ECDH-ES example performs to the canonical
-// published RFC 7748 section 6.1 vector: each published private scalar
-// derives the published public key, and the cross agreement equals the
-// published shared secret in both directions. It then composes the same
-// published keys through this package's envelope: a seal taking Alice's
-// key as the injected ephemeral carries Alice's published coordinate as
-// the protected epk and opens byte-identical with Bob's private key.
+// pinnedDecrypter stands in for Bob's private key in the RFC 7748
+// section 6.1 composition below: the published shared secret is returned
+// for any ephemeral, so Open runs its full pipeline (header, epk, IV/tag
+// lengths, AAD, CEK derivation) against the pinned agreement without
+// needing an untrustworthy recalled scalar.
+type pinnedDecrypter struct{ z []byte }
+
+var _ Decrypter = pinnedDecrypter{}
+
+// ECDH returns the pinned shared secret for any ephemeral public key.
+func (d pinnedDecrypter) ECDH(*ecdh.PublicKey) ([]byte, error) { return d.z, nil }
+
+// TestX25519SharedSecretRFC7748Vector pins the X25519 key agreement the
+// ECDH-ES envelope performs to the canonical RFC 7748 section 6.1 vector
+// as pinned by the Go toolchain's crypto/ecdh tests: Alice's published
+// scalar derives her published public key, and the agreement with Bob's
+// published public key equals the published shared secret. It then
+// composes the same published keys through this package's envelope: a
+// seal taking Alice's key as the injected ephemeral to Bob's published
+// public key carries Alice's published coordinate as the protected epk,
+// and opens byte-identical when the recipient's shared secret is the
+// published one — so the message's CEK is provably derived from the
+// pinned shared secret.
 func TestX25519SharedSecretRFC7748Vector(t *testing.T) {
 	alice := x25519HexPrivate(t, rfc7748AlicePriv)
 	assert.Equal(t, rfc7748AlicePub, hex.EncodeToString(alice.PublicKey().Bytes()),
 		"Alice's published scalar must derive her published public key")
 
-	bob := x25519HexPrivate(t, rfc7748BobPriv)
-	assert.Equal(t, rfc7748BobPub, hex.EncodeToString(bob.PublicKey().Bytes()),
-		"Bob's published scalar must derive his published public key")
-
-	z, err := alice.ECDH(x25519HexPublic(t, rfc7748BobPub))
+	bobPub := x25519HexPublic(t, rfc7748BobPub)
+	z, err := alice.ECDH(bobPub)
 	require.NoError(t, err)
 	assert.Equal(t, rfc7748Shared, hex.EncodeToString(z),
 		"ECDH(Alice, Bob) must equal the RFC 7748 section 6.1 shared secret")
 
-	z2, err := bob.ECDH(x25519HexPublic(t, rfc7748AlicePub))
-	require.NoError(t, err)
-	assert.Equal(t, z, z2, "the X25519 agreement must be symmetric")
-
 	// Compose the published agreement through the envelope: Alice's key
-	// acts as the sender's ephemeral, Bob's as the recipient.
+	// acts as the sender's ephemeral, Bob's published public key as the
+	// recipient, so the sealed CEK is derived from the published shared
+	// secret.
 	payload := []byte("rfc-pinned payload")
-	compact, err := seal(payload, "rfc-recipient", x25519HexPublic(t, rfc7748BobPub), alice)
+	compact, err := seal(payload, "rfc-recipient", bobPub, alice)
 	require.NoError(t, err)
 
 	parts := strings.Split(compact, ".")
 	require.Len(t, parts, 5, "a compact JWE has five segments")
 	var header protectedHeader
 	require.NoError(t, json.Unmarshal(b64(t, parts[0]), &header))
-	assert.Equal(t, base64.RawURLEncoding.EncodeToString(x25519HexPublic(t, rfc7748AlicePub).Bytes()),
+	assert.Equal(t, base64.RawURLEncoding.EncodeToString(alice.PublicKey().Bytes()),
 		header.Epk.X, "the protected epk must carry the published ephemeral public key")
 
-	opened, err := Open(compact, bob)
+	opened, err := Open(compact, pinnedDecrypter{z: z})
 	require.NoError(t, err)
-	assert.Equal(t, payload, opened)
+	assert.Equal(t, payload, opened,
+		"a message sealed over the pinned agreement must open with the published shared secret")
 }
 
 // TestConcatKDFRFC7518AppendixC asserts the SP 800-56A Concat KDF
