@@ -23,6 +23,61 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
   `internal/jwk`, `wire` constants/error catalog, `gatewaytest` minter +
   deterministic `ReplayCache` + manifest verifier).
 
+## Decisions (agreed in discussion)
+
+1. **`internal/jwk`**: `ParseKey`/`ParseJWKS` additionally accept OKP/X25519
+   keys only when `use` is `enc` (`alg` absent or `ECDH-ES`); X25519 without
+   `use:enc` is rejected. `KeySet.ByKid` was split into `SigByKid` (Ed25519/
+   P-256 only, never X25519) and `EncByKid` (X25519 `use:enc` only); an empty
+   kid matches nothing. Thumbprints work for X25519 over `crv`,`kty`,`x`.
+   `envelope` may import `internal/jwk` (never `internal/jws`); no jwk type is
+   re-exported.
+2. **`verify.ReplayCache`**: `Check(ctx, scope, key string, until time.Time)
+   (bool, error)` atomically reserves; `Release(ctx, scope, key string)
+   error` frees. Scopes `jti` and `webhook_id`; any `Check` error denies.
+   In-memory default (`NewMemoryReplayCache`) is concurrency-safe and evicts
+   after `until`. Retention: `jti` until `exp`+60 s; `webhook_id` until
+   `max(exp+60s, now+retention)`, default 24 h via `WithReplayRetention` (the
+   gateway re-mints delivery tokens per retry with the same `webhook_id`).
+   The `gatewaytest` fake satisfies this interface; the compile-time
+   assertion lives in `gatewaytest/replay_test.go` (non-test `gatewaytest`
+   never imports `verify`, avoiding cycles with verify tests).
+3. **`verify.NewVerifier(jwksURL, self string, opts...)`** with
+   `WithHTTPClient`, `WithTTL` (default 5 m), `WithRefetchInterval` (default
+   30 s), `WithClock`, `WithReplayCache`, `WithReplayRetention`; `iss` must be
+   `gateway`. JWKS cache: kid-only via `SigByKid`, TTL refresh, one refetch
+   per unknown kid under a single global rate-limit window then deny, failed
+   fetch keeps the last good set, concurrency-safe.
+4. **`(*Verifier).Verify(ctx, token, typ, body)`**: `jws.Parse` + exact
+   `typ`, Ed25519 signature against the JWKS key, required claims from
+   `wire.TokenKindTable`, `iss`, `aud` (string or single-element array equal
+   to self — multi-element or other always denies), `exp` and `iat` with 60 s
+   skew, purpose rules per kind, `body_sha256` (base64url SHA-256,
+   constant-time) on delivery/event. Unknown claims ignored;
+   `user_ref`/`payment_id` optional. `ks-party+jwt` denies with
+   `ErrUnsupportedKind` (party-signed, not verifiable against gateway JWKS).
+   Sentinel errors usable with `errors.Is`.
+5. **`verify.Middleware(v, typ, opts...)`**: `Authorization: Bearer`; body
+   read once via `http.MaxBytesReader` (1 MiB default, option); a present
+   webhook-id header must equal the `webhook_id` claim; dedupe after
+   verification. Verification failure → 401, replay → 200 empty body, both
+   without calling the handler; the handler gets a byte-exact body buffer and
+   `ClaimsFromContext`; a ≥500 response or panic releases the reservation
+   (panic re-raised).
+6. **`(*Verifier).Ticket(ctx, token, typ, wantScope)`**: only
+   `ks-approval+jwt`/`ks-access+jwt`; the six Recipient Verification Rules;
+   exact scope match; `jti` consumed last (scope `jti`, until `exp`+60 s);
+   repeated `jti` → `ErrReplay` (callers map to 409).
+7. **Identity**: phone normalizes to E.164 digits without `+` (10–15 digits,
+   no leading `0`, e.g. `6281234567890`, matching the backend
+   `utils/phone.go`); pepper is exactly 32 raw bytes; shared vectors are
+   authored here in `identity/testdata/vectors.json` with a fixed test pepper
+   (the backend mirrors them later — authoring-time reconciliation).
+8. **Envelope**: `Seal` injects the ephemeral X25519 key; `Open` rejects via
+   the caller's `Decrypter`; `SelectEncKey` goes through `internal/jwk`
+   `EncByKid`. The RFC 8037 A.6 vector is a **new** test in this phase (this
+   task file previously claimed it already existed — corrected below).
+
 ## Checklist
 
 ### `SDK-VERIFY-001` — JWKS cache: kid-only selection, one bounded refetch
@@ -168,7 +223,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 - **Accept**: RFC 8037 A.6 vector passes; seal→open round trip is byte-
   identical.
 - **Deny**: a tampered ciphertext/tag fails.
-- **Proving tests**: `TestRFC8037A6Vector` (already green — keep green),
+- **Proving tests**: `TestRFC8037A6Vector`,
   `TestSealOpenRoundTripByteIdentical`,
   `TestSealOpenTamperFails`.
 
@@ -176,17 +231,23 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 Create:
 
-- `verify/jwks_cache.go`, `verify/checks.go`, `verify/middleware.go`,
-  `verify/rules.go`, `verify/replay.go`, `verify/verify_test.go`
+- `verify/errors.go`, `verify/options.go`, `verify/replay.go`,
+  `verify/jwks_cache.go`, `verify/claims.go`, `verify/checks.go`,
+  `verify/middleware.go`, `verify/rules.go` plus the tests
+  (`replay_test.go`, `jwks_cache_test.go`, `checks_test.go`,
+  `middleware_test.go`, `rules_test.go`, `helpers_test.go`,
+  `verify_test.go`)
 - `identity/normalize.go`, `identity/hash.go`, `identity/identity_test.go`
-  (+ `identity/testdata/` fixture vectors)
-- `envelope/seal.go`, `envelope/open.go`, `envelope/envelope_test.go`,
+  (+ `identity/testdata/vectors.json` shared fixture vectors)
+- `envelope/kdf.go`, `envelope/seal.go`, `envelope/open.go`,
+  `envelope/jwks.go`, `envelope/envelope_test.go`, `envelope/jwks_test.go`,
   `envelope/fuzz_test.go`
 
 Edit (only if the package contract changes):
 
 - `verify/doc.go`, `identity/doc.go`, `envelope/doc.go` and their
-  `README.md` planned-file lists
+  `README.md` file lists, plus the phase-2 doc alignment (`docs/ADR/005`,
+  `docs/ARCHITECTURE.md` import table, `PROPOSAL.md` §7/§8/SDK-ID-001)
 
 ## Definition of Done
 
@@ -202,10 +263,21 @@ Edit (only if the package contract changes):
 - [ ] Every new exported symbol has a doc comment; files ≤ 300 lines;
       complexity ≤ 15.
 
-## Open items
+## Open items — closed
 
-- SDK-ID-C01 shared fixture vectors: confirm the backend adapter's source
-  vectors or author them here and have the backend mirror them (authoring-
-  time reconciliation — no test reads another repo).
-- Confirm the pepper is supplied by callers only (test pepper lives in
-  fixtures; no pepper ever committed outside `testdata`).
+- **SDK-ID-C01 shared fixture vectors**: authored here in
+  `identity/testdata/vectors.json` (email rows, phone rows, `N/A` marker
+  cases) with the fixed test pepper pinned by the file; the backend adapter
+  mirrors these vectors later. Authoring-time reconciliation only — no test
+  reads another repo.
+- **Pepper custody**: supplied by callers only — `HashEmail`/`HashPhone`
+  require exactly 32 raw bytes and never generate, store, or log a pepper;
+  the fixed test pepper lives in `identity/testdata/vectors.json` (mirrored
+  by the inline test constant) and no production pepper is ever committed.
+
+## Flagged upstream (gateway-side, not edited here)
+
+- Gateway ADR-005's phone wording says "E.164" without clarifying that the
+  `+` is dropped; SDK-ID-001 pins "E.164 digits, no '+'" (matching the
+  backend `utils/phone.go`). Clarify the gateway ADR wording upstream — a
+  gateway repo doc change, out of scope for this module.

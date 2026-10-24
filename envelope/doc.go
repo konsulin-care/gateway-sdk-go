@@ -2,8 +2,9 @@
 // normative JWE Envelope: alg ECDH-ES, enc A256GCM over X25519, fresh
 // ephemeral epk per message, protected-header kid, Concat KDF (SHA-256).
 //
-// Allowed imports: standard library (crypto/ecdh, crypto/aes, ...), wire
-// (PRD §7 dependency rules).
+// Allowed imports: standard library (crypto/ecdh, crypto/aes, ...), wire,
+// and internal/jwk for recipient use:enc key selection only — never
+// internal/jws (PRD §7 dependency rules). No jwk type is re-exported.
 //
 // Requirement IDs: SDK-ENV-001, SDK-ENV-002, SDK-ENV-003, SDK-ENV-C01.
 package envelope

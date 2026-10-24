@@ -68,7 +68,7 @@ gateway-sdk-go/
   testdata/golden/  # mirrored vectors incl. testonly-party-private.key
 ```
 
-Dependency rules (normative): non-test code imports the standard library or this module only — no third-party imports from non-test code, test-only deps (`testify`) allowed; `wire`, `internal/jws`, and `internal/jwk` import stdlib only; `internal/jws` and `internal/jwk` are never re-exported; `auth` = `internal/jws` + `internal/jwk` + `wire`; route packages and `gateway` = `client` + `auth` + `wire`; `verify` = `internal/jws` + `internal/jwk` + `wire` + the `ReplayCache` interface; `envelope` = `crypto/ecdh` + `crypto/aes` + `wire`; `internal/adminboot` = stdlib + `wire`, never part of the public client; nothing outside `internal/jws`/`internal/jwk` implements JWS/JWK primitives; `gatewaytest`, `internal/conformance`, `internal/integration`, and `cmd/conformance` may import public packages, nothing imports `gatewaytest` except test files and the conformance code; no import cycles.
+Dependency rules (normative): non-test code imports the standard library or this module only — no third-party imports from non-test code, test-only deps (`testify`) allowed; `wire`, `internal/jws`, and `internal/jwk` import stdlib only; `internal/jws` and `internal/jwk` are never re-exported; `auth` = `internal/jws` + `internal/jwk` + `wire`; route packages and `gateway` = `client` + `auth` + `wire`; `verify` = `internal/jws` + `internal/jwk` + `wire` + the `ReplayCache` interface; `envelope` = `crypto/ecdh` + `crypto/aes` + `wire` + `internal/jwk` (recipient `use:enc` key selection only, never `internal/jws`); `internal/adminboot` = stdlib + `wire`, never part of the public client; nothing outside `internal/jws`/`internal/jwk` implements JWS/JWK primitives; `gatewaytest`, `internal/conformance`, `internal/integration`, and `cmd/conformance` may import public packages, nothing imports `gatewaytest` except test files and the conformance code; no import cycles.
 
 Key flows (normative for development):
 
@@ -84,7 +84,7 @@ Key flows (normative for development):
 - **Exact `typ`**: string equality per Token Kinds row (`ks-party+jwt`, `ks-approval+jwt`, `ks-access+jwt`, `ks-delivery+jwt`, `ks-event+jwt`, `ks-result+jwt`); a missing or generic `typ` fails even under a valid signature (RFC 8725 §3.11).
 - **Key selection**: only the token's own header `kid`; keys come only from JWKS; an unknown `kid` triggers **one** rate-limited JWKS refetch (bounded per window, no refetch storms), then fail closed.
 - **Rotation**: the gateway JWKS serves current plus previous key during a rotation (each `kid` its RFC 7638 thumbprint); the SDK selects by `kid`, so no config change is ever needed to accept a rotated key.
-- **Replay**: `ReplayCache` is an interface (`jti`/`webhook_id` scope) with an in-memory default; callers plug Redis etc. for multi-instance. Dedupe lookup and insert are atomic per key.
+- **Replay**: `ReplayCache` is an interface (`jti`/`webhook_id` scope) with an in-memory default; callers plug Redis etc. for multi-instance. The interface is `Check(ctx, scope, key, until)` → `(bool, error)` — atomically reserves the key until that instant, any error denies — plus `Release(ctx, scope, key)` → `(error)`, which frees a reservation after a failed handler. Dedupe lookup and insert are atomic per key. Retention: `jti` until `exp`+60 s; `webhook_id` until `max(exp+60s, now+retention)` with a 24 h default — the gateway re-mints delivery tokens per retry with the same `webhook_id`.
 - **Transport**: `https` only — base URLs and JWKS fetches reject `http` unless the caller opts into `WithInsecureTransport` (local dev/test; fails at construction in production builds).
 - **Logging**: `log/slog` hooks log method, path, status, request_id, `kid`, `typ` — never bodies, tokens, keys, or the pepper.
 - **Constant-time compares**: `hmac.Equal`/`subtle.ConstantTimeCompare` for `body_sha256`, identity hashes, and any secret-derived byte compare.
@@ -116,7 +116,7 @@ Key flows (normative for development):
 
 ### 9.4 Identity `SDK-ID`
 
-- `SDK-ID-001 (M)` — SHALL normalize (email: lowercase + trim; phone: E.164) and compute `HMAC-SHA256(normalized, pepper)` rendered as standard base64 of exactly 32 bytes, or the `N/A` marker when a field is not applicable — the gateway `hashfmt` convention (ADR-005).
+- `SDK-ID-001 (M)` — SHALL normalize (email: lowercase + trim; phone: E.164 digits, no '+') and compute `HMAC-SHA256(normalized, pepper)` rendered as standard base64 of exactly 32 bytes, or the `N/A` marker when a field is not applicable — the gateway `hashfmt` convention (ADR-005).
 - `SDK-ID-002 (M)` — SHALL expose format validation mirroring the gateway's reject rule (marker or valid 32-byte base64), so malformed hashes never reach the wire.
 - `SDK-ID-C01`: shared test vectors (fixture inputs → expected hashes for fixed pepper) pass — same vectors the backend adapter tests use.
 

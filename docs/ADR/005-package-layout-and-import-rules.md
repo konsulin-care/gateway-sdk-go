@@ -1,6 +1,7 @@
 # ADR 005: Package Layout and Import Rules
 
-**Status:** Accepted
+**Status:** Accepted (amended in phase 2: `envelope` → `internal/jwk` edge;
+X25519 `use:enc` keys live in `internal/jwk`)
 **Date:** 2026-10-21
 **Deciders:** Konsulin central
 
@@ -19,10 +20,17 @@ public API surface, and the dependency graph must stay auditable per ADR-002.
 - **JOSE split**: `internal/jws` (RFC 7515/7518 compact JWS — alg checks,
   ES256 DER↔raw R||S) and `internal/jwk` (RFC 7517 JWK/JWKS parse, RFC 7638
   thumbprint) — separate packages on separate RFCs, both hand-written on the
-  stdlib (ADR-002), both **never re-exported**. Only `auth`, `verify`, and
-  `gatewaytest` may import them; nothing outside them implements JWS/JWK
-  primitives. `envelope` is deliberately **not** built on `internal/jws` —
-  JWE goes through `crypto/ecdh` + `crypto/aes` + `wire` only.
+  stdlib (ADR-002), both **never re-exported**. `internal/jwk` additionally
+  accepts OKP/X25519 **encryption** keys — only with `use` `enc` and `alg`
+  absent or `ECDH-ES` — selected via `EncByKid`, while signing keys
+  (OKP/Ed25519, EC/P-256) are selected via `SigByKid`; an empty `kid`
+  matches nothing on either selector. Only `auth`, `verify`, and
+  `gatewaytest` may import `internal/jws`, and only `auth`, `verify`,
+  `gatewaytest`, and `envelope` may import `internal/jwk` — `envelope` needs
+  it for recipient `use:enc` key selection, and no jwk type is re-exported;
+  nothing outside these packages implements JWS/JWK primitives. `envelope`
+  is deliberately **not** built on `internal/jws` — JWE goes through
+  `crypto/ecdh` + `crypto/aes` + `wire` + `internal/jwk` only.
 - **Public surface**: `wire` (DTOs, typ/capability constants, `*wire.Error` —
   the contract leaf), `auth`, `client`, `verify`, `identity`, `envelope`,
   route packages (`gateway`, `parties`, `identities`, `approvals`, `listings`,

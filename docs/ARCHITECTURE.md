@@ -15,7 +15,8 @@ gateway-sdk-go/
   wire/                 # DTOs, typ constants, purposes, capabilities, *wire.Error
   internal/jws/         # compact JWS encode/verify (RFC 7515/7518), alg checks,
                         #   ES256 DER<->raw R||S — hand-written, no go-jose/jwx
-  internal/jwk/         # JWK/JWKS parse (RFC 7517), RFC 7638 thumbprints
+  internal/jwk/         # JWK/JWKS parse (RFC 7517), RFC 7638 thumbprints —
+                        #   signing keys + X25519 use:enc recipient keys
   auth/                 # ks-party signing: claims, kid, proof of possession, fresh jti
   client/               # Client core: options, transport, idempotency, retry, errors
   verify/               # inbound trust: JWKS cache, per-kind checks, middleware, ReplayCache
@@ -43,9 +44,11 @@ Normative rules (PRD §7):
   leaves.
 - `internal/jws` and `internal/jwk` are never re-exported; nothing outside them
   implements JWS/JWK primitives; only `auth`, `verify`, and `gatewaytest` use
-  them.
-- `envelope` uses `crypto/ecdh` + `crypto/aes` + `wire` — JWE never passes
-  through `internal/jws`.
+  `internal/jws`, and those three plus `envelope` use `internal/jwk`
+  (recipient `use:enc` key selection only).
+- `envelope` uses `crypto/ecdh` + `crypto/aes` + `wire` + `internal/jwk`
+  (recipient `use:enc` key selection, no jwk type re-exported) — JWE never
+  passes through `internal/jws`.
 - `gatewaytest` is imported only by test files (including the test-only
   `internal/integration` package) and the conformance runner
   (`internal/conformance` + `cmd/conformance`). No import cycles;
@@ -60,7 +63,7 @@ Normative rules (PRD §7):
 | `client` | `wire`, `auth` | imports no route packages |
 | `verify` | `wire`, `internal/jws`, `internal/jwk` | defines the `ReplayCache` interface |
 | `identity` | `wire` | `crypto/hmac` identity hashes |
-| `envelope` | `wire` | `crypto/ecdh`, `crypto/aes` only |
+| `envelope` | `wire`, `internal/jwk` | `crypto/ecdh`, `crypto/aes`; `internal/jwk` for `use:enc` recipient key selection |
 | `gateway` | `client`, `auth`, `wire` | public gateway routes |
 | `parties` | `client`, `auth`, `wire` | typed routes |
 | `identities` | `client`, `auth`, `wire` | typed routes |

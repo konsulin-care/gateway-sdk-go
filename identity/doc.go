@@ -1,6 +1,7 @@
 // Package identity normalizes identity fields (email lowercase + trim, phone
-// E.164) and computes gateway hashfmt HMAC-SHA256 identity hashes (gateway
-// ADR-005), plus format validation so malformed hashes never reach the wire.
+// E.164 digits without '+') and computes gateway hashfmt HMAC-SHA256 identity
+// hashes (gateway ADR-005), plus format validation so malformed hashes never
+// reach the wire.
 //
 // Allowed imports: standard library, wire (PRD §7 dependency rules).
 //
