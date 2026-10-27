@@ -10,8 +10,11 @@ the returned ticket with the six Recipient Verification Rules (`verify`).
 
 **Related requirements**: SDK-API-001, SDK-API-002.
 
-**Planned files**:
-- `approvals.go` — `Mint` method (context, `*wire.Error`, stable `Idempotency-Key`)
-- `approvals_test.go` — route tests against `gatewaytest` fakes
+**Files** (actual):
+- `approvals.go` — `Client`, `New(cli)`, `Mint` method (context,
+  `*wire.Error`, stable `Idempotency-Key`)
+- `doc.go` — package doc
+- `approvals_test.go` — route tests against `gatewaytest` fakes;
+  `capability_denied` surfaces as `*wire.Error` after one attempt
 
 **Built by**: `docs/tasks/03-client-and-routes.md`.

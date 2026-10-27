@@ -13,8 +13,12 @@ rows** (the public read never exposes a provider endpoint); `metering`
 
 **Related requirements**: SDK-API-001, SDK-API-002.
 
-**Planned files**:
-- `listings.go` — `Create`, `List` methods (context, `*wire.Error`)
-- `listings_test.go` — route tests against `gatewaytest` fakes
+**Files** (actual):
+- `listings.go` — `Client`, `New(cli)`, `Create`, `List` methods
+  (context, `*wire.Error`)
+- `doc.go` — package doc
+- `listings_test.go` — route tests against `gatewaytest` fakes;
+  `TestListOmitsEndpointURLForWebhookRows` and
+  `TestListDecodesMeteringOnEveryRow` pin the §9.6 route-shape note
 
 **Built by**: `docs/tasks/03-client-and-routes.md`.
