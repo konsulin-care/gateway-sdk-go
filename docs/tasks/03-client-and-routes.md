@@ -32,7 +32,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-CLIENT-001` — one `Client`, functional options
 
-- [ ] **Behavior**: `WithBaseURL`, `WithSigner`, `WithHTTPClient`,
+- [x] **Behavior**: `WithBaseURL`, `WithSigner`, `WithHTTPClient`,
   `WithInsecureTransport`, `WithReplayCache`, `WithLogger`, `WithRetry`;
   every method takes `context.Context`.
 - **Accept**: a fully configured client issues context-bound calls with
@@ -43,7 +43,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-CLIENT-002` — generated `Idempotency-Key` (ADR-011)
 
-- [ ] **Behavior**: generate an `Idempotency-Key` for every create the
+- [x] **Behavior**: generate an `Idempotency-Key` for every create the
   caller does not supply; stable across retries of that create; a new key
   after a terminal 402 (`GW-HOOK-006`) or any body change; caller-supplied
   keys pass through untouched.
@@ -56,7 +56,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-CLIENT-003` — error surfacing
 
-- [ ] **Behavior**: every non-2xx surfaced as `*wire.Error` parsed from
+- [x] **Behavior**: every non-2xx surfaced as `*wire.Error` parsed from
   `{error: {code, message, request_id}}`, preserving `code` and
   `request_id`.
 - **Accept**: a gateway error body decodes to `*wire.Error` with both
@@ -67,14 +67,14 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-CLIENT-C01` — zero options fail at construction
 
-- [ ] **Behavior**: no silent defaults to production URLs.
+- [x] **Behavior**: no silent defaults to production URLs.
 - **Accept**: n/a — construction success requires explicit options.
 - **Deny**: a zero-option `Client` errors at construction.
 - **Proving test**: `TestClientZeroOptionsFailsConstruction`.
 
 ### `SDK-RETRY-001` — fresh sign per attempt, stable key per create
 
-- [ ] **Behavior**: every attempt signs fresh (new `jti`, new `iat` —
+- [x] **Behavior**: every attempt signs fresh (new `jti`, new `iat` —
   `TestSignPartyAttemptFreshJtiPerAttempt`, **landed**);
   `Idempotency-Key` constant across attempts of one logical create.
 - **Accept**: retries re-sign through the same path with a new `jti`.
@@ -84,7 +84,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-RETRY-002` — retryable class (**landed** classification)
 
-- [ ] **Behavior**: network errors (dial/timeout/reset), `409
+- [x] **Behavior**: network errors (dial/timeout/reset), `409
   idempotency_in_progress` (`GW-API-002`), `429` (`GW-RATE-001`,
   `GW-ADMIN-003`, `GW-IDX-011`, `GW-STS-005`), `502`, `503`
   (`GW-HOOK-009`), `504`; catalog-disposition driven (`wire.Retryable`);
@@ -100,7 +100,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-RETRY-003` — terminal class (**landed** classification)
 
-- [ ] **Behavior**: `400`, `401`, `402` `GW-HOOK-006` (terminal **and**
+- [x] **Behavior**: `400`, `401`, `402` `GW-HOOK-006` (terminal **and**
   mandates a new `Idempotency-Key`), `403` `capability_denied` /
   `GW-PARTY-010` / `GW-PARTY-011`, `404`, `409` `GW-PARTY-006` (only
   `GW-API-002` makes 409 retryable), `413`, `422` `GW-HOOK-008`.
@@ -114,7 +114,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-RETRY-C01` — retry sequence semantics
 
-- [ ] **Behavior**: composite criterion of §9.8.
+- [x] **Behavior**: composite criterion of §9.8.
 - **Accept**: a 409→200 sequence replays with the **same**
   `Idempotency-Key` and a **different** `jti`.
 - **Deny**: a 403 returns on the first response — no second attempt.
@@ -123,7 +123,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-API-001` — every §9.6 row exists
 
-- [ ] **Behavior**: one typed method per row with request/response
+- [x] **Behavior**: one typed method per row with request/response
   structs in `wire`, context support, typed errors; `parties.Rotate`
   signs with the party's **current active key** (a superseded
   grace-window key is rejected gateway-side with `GW-PARTY-011`).
@@ -138,7 +138,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-API-002` — idempotency encoding + no 4xx retry
 
-- [ ] **Behavior**: `Idempotency-Key` on rows marked required; 4xx
+- [x] **Behavior**: `Idempotency-Key` on rows marked required; 4xx
   rejected without retry.
 - **Accept**: each required row sends the header (generated or
   caller-supplied).
@@ -148,7 +148,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-WIRE-001` — route DTOs byte-match the contract
 
-- [ ] **Behavior**: DTOs for every request/response body; JSON tags match
+- [x] **Behavior**: DTOs for every request/response body; JSON tags match
   the Bruno examples byte-for-byte — including the service-receipt body
   `{webhook_id, status, quota_remaining, body}` (`quota_remaining` =
   provider `X-Quota-Remaining` verbatim string or `null`) and the
@@ -160,7 +160,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-WIRE-002` — typ/purpose/capability/kind constants (**landed**)
 
-- [ ] **Behavior**: six `typ` constants; seven purposes in PRD order
+- [x] **Behavior**: six `typ` constants; seven purposes in PRD order
   (`webhook-delivery`, `settlement-notification`, `service-result`,
   `payment-required`, `service-receipt`, `webhook-result`, `admin-auth`);
   capability catalog; token-kind table with required vs conditional
@@ -175,7 +175,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-WIRE-003` — `*wire.Error` + full `GW-*` catalog (**landed**)
 
-- [ ] **Behavior**: `*wire.Error{Code, Message, RequestID, Status}` as the
+- [x] **Behavior**: `*wire.Error{Code, Message, RequestID, Status}` as the
   one error type; sentinels for `errors.Is/As`; the full `GW-*` catalog
   as data (`wire.LookupCode`, `wire.Codes` — code, HTTP status,
   disposition) covering the hardening codes (`GW-PARTY-010/011`,
@@ -189,7 +189,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-WIRE-004` — forward-compatible decoding (ADR-012)
 
-- [ ] **Behavior**: unknown JSON fields and unknown claim names are
+- [x] **Behavior**: unknown JSON fields and unknown claim names are
   ignored — never an error, never a deny; an unrecognized `GW-*` code
   classifies from HTTP status instead of failing. Selection stays
   fail-closed: unknown `typ`/`kid` deny (covered in `verify`, task 02).
@@ -201,7 +201,7 @@ re-checking the route table, never a test dependency (AGENTS.md). Re-run
 
 ### `SDK-TEST-001` (extension) — fake handler per route
 
-- [ ] **Behavior**: `gatewaytest` fake handlers for every §9.6 route
+- [x] **Behavior**: `gatewaytest` fake handlers for every §9.6 route
   with error-envelope responses, idempotency replay, and 409/429/5xx
   sequences for retry tests.
 - **Accept**: each row has a fake that replays idempotent creates and
@@ -234,29 +234,39 @@ Edit:
 
 ## Definition of Done
 
-- [ ] Every checklist item's proving tests green; accept and deny
+- [x] Every checklist item's proving tests green; accept and deny
       expectations both asserted.
-- [ ] All §9.6 rows implemented and tested against `gatewaytest`
+- [x] All §9.6 rows implemented and tested against `gatewaytest`
       (exclusions per the coverage rule: admin routes,
       `GET /v1/webhooks/dlq`, `auth:provider` inbound, admin bootstrap
       trio).
-- [ ] SDK-RETRY-C01 green: 409→200 same `Idempotency-Key` / different
+- [x] SDK-RETRY-C01 green: 409→200 same `Idempotency-Key` / different
       `jti`; 403 terminal on first response; `Retry-After` honored; a 402
       mandates a new key.
-- [ ] SDK-WIRE-001: JSON field names match the Bruno examples
+- [x] SDK-WIRE-001: JSON field names match the Bruno examples
       byte-for-byte for every DTO.
-- [ ] `go test -race ./...` clean (no races under concurrent client use),
+- [x] `go test -race ./...` clean (no races under concurrent client use),
       zero network, no test reading outside the module; `mise run qc`
       green.
-- [ ] Every new exported symbol has a doc comment; files ≤ 300 lines;
+- [x] Every new exported symbol has a doc comment; files ≤ 300 lines;
       complexity ≤ 15.
 
-## Open items
+## Open items (both resolved)
 
-- The §9.6 coverage rule is explicit-exclusion, not path-prefix: re-check
-  the route list against the gateway's `docs/api/` collection
-  (authoring-time) at phase end in case the gateway added party-facing
-  routes since bootstrap.
-- `WithInsecureTransport` + `gatewaytest` runs over `http` locally —
-  confirm the construction-time guard still fails closed for non-local
-  base URLs.
+- [x] **Route-list re-check (done, authoring-time)**: re-checked the
+  gateway's `docs/api/` collection against `wire.RouteTable()` at phase
+  end. Exactly 20 Bruno files carry `auth:party` / `auth:public` /
+  `auth:ticket`; after the explicit `admin/login.yml` exclusion (§5
+  operator session surface), the remaining 19 party-facing rows match
+  the table 1:1 — no party-facing route has been added since
+  bootstrap. All `auth:admin` files (admin folder, `GET
+  /v1/webhooks/dlq`) and `auth:provider` reference contracts (inbound
+  deliveries) stay excluded per the explicit-exclusion coverage rule.
+- [x] **Loopback guard confirmed (done)**: the construction-time guard
+  still fails closed for non-local base URLs — `transportURL` in
+  `client/options.go` rejects any `http` base URL unless
+  `WithInsecureTransport` is set AND the host is loopback
+  (`localhost`, 127.0.0.0/8, `::1`); non-loopback `http` fails
+  `client.New` even with the opt-in. Proven by
+  `TestHTTPBaseURLWithoutInsecureTransportFails` and
+  `TestWithInsecureTransportLoopbackOnly` (client, green).

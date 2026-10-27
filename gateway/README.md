@@ -9,8 +9,11 @@ core.
 
 **Related requirements**: SDK-API-001, SDK-API-002.
 
-**Planned files**:
-- `gateway.go` — `JWKS`, `Health` methods (context support, `*wire.Error`)
-- `gateway_test.go` — route tests against `gatewaytest` fakes
+**Files** (actual):
+- `gateway.go` — `Client`, `New(cli)`, `JWKS`, `Health` methods
+  (context support, `*wire.Error`)
+- `doc.go` — package doc
+- `gateway_test.go` — route tests against `gatewaytest` fakes (public
+  rows send no `Authorization`; non-2xx surfaces `*wire.Error`)
 
 **Built by**: `docs/tasks/03-client-and-routes.md`.

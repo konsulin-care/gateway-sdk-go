@@ -10,11 +10,21 @@ packages, and `gatewaytest`.
 
 **Related requirements**: SDK-TEST-002.
 
-**Planned files**:
+**Files** (actual):
+- `doc.go` — package doc
+- `routes_test.go` — `TestRouteTableRowsThroughTypedFunctions` (phase 3):
+  one typed invoker per `wire.RouteTable()` row (19 invokers keyed
+  `package/Method`), asserting the recorded verb/path, an
+  `Idempotency-Key` on every flagged row and none elsewhere, no
+  `Authorization` on public rows, and a `ks-party+jwt` bearer on party
+  rows (`requireKSPartyBearer`, `pathID`, `routeFixture`)
+
+**Planned in phase 4** (`docs/tasks/04-integration-and-release.md`):
 - `enroll_test.go` — enrollment with proof of possession
 - `signed_calls_test.go` — party-authenticated calls, retry/idempotency
 - `exchange_test.go` — approval + direct exchange with `envelope`
 - `callback_test.go` — webhook delivery through `verify` middleware
 - `main_test.go` — shared offline setup
 
-**Built by**: `docs/tasks/04-integration-and-release.md`.
+**Built by**: `docs/tasks/03-client-and-routes.md` (routes_test.go),
+`docs/tasks/04-integration-and-release.md` (phase-4 suites).
