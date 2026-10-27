@@ -14,13 +14,24 @@ packages (plus `internal/adminboot` for setup).
 **Related requirements**: SDK-CONF-001, SDK-CONF-002, SDK-CONF-003,
 SDK-CONF-C01.
 
+**Runner**: `Run` executes the registry, prints one result line per case to
+stdout, prints failing case names to stderr, and returns the exit code
+(`ExitOK`/`ExitMismatch`/`ExitUsage` — usage errors are detected before any
+request). `Version` reports the runner version from the Go build info
+(SDK-CONF-003). The operator password comes from `Config.OperatorPass`
+(environment only, no flag) and is never printed.
+
 **Files**:
 - `registry.go` — ordered case registry (Kind, Case, Env, `Registry()`)
 - `positive.go` — QC-chain happy paths (SDK-CONF-001)
 - `negative.go` — SDK-CONF-002 deny cases
 - `callback.go` — plain-HTTP result-callback receiver
+- `runner.go` — registry execution, report streams, exit codes (SDK-CONF-C01)
+- `config.go` — runner configuration and validation (usage errors)
+- `version.go` — runner version from runtime/debug build info (SDK-CONF-003)
 - `doc.go` — package doc plus the shared case helpers (client builders, probes)
 - `conformance_test.go` — QC-chain registry and import tests
 - `cases_test.go` — negative-case and callback-receiver tests
+- `runner_test.go` — runner exit codes, usage errors, password redaction
 
 **Built by**: `docs/tasks/04-integration-and-release.md`.
