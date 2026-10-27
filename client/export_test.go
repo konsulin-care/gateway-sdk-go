@@ -174,3 +174,20 @@ func RetryPolicyOf(c *Client) RetryPolicy { return c.retry }
 
 // ReplayCacheOf returns c's injected replay cache (test hook).
 func ReplayCacheOf(c *Client) ReplayCache { return c.replay }
+
+// SetSleepHook injects the backoff sleeper of c (test hook): fn replaces
+// the production timer so tests record delays without waiting.
+func SetSleepHook(c *Client, fn func(context.Context, time.Duration) error) { c.sleep = fn }
+
+// SetNowHook injects the clock reading of c (test hook): fn replaces
+// time.Now for Retry-After HTTP-date parsing and jti reservation
+// deadlines.
+func SetNowHook(c *Client, fn func() time.Time) { c.now = fn }
+
+// SetJitterHook injects the jitter source of c (test hook): fn replaces
+// the math/rand draw with a deterministic one, drawn from [0, n).
+func SetJitterHook(c *Client, fn func(int64) int64) { c.rand = fn }
+
+// SetReplayCache injects the replay cache of c after construction (test
+// hook): rc replaces the WithReplayCache value, nil removes it.
+func SetReplayCache(c *Client, rc ReplayCache) { c.replay = rc }

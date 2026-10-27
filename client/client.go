@@ -11,12 +11,15 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/konsulin-care/gateway-sdk-go/wire"
 )
 
 // Client is the one Client core (SDK-CLIENT-001); all parts injected via
 // functional options, no silent production defaults (SDK-CLIENT-C01).
+// The retry hooks (sleep, now, rand) default to the production timer, the
+// wall clock, and math/rand, and are replaceable in tests.
 type Client struct {
 	baseURL    *url.URL
 	partyID    string
@@ -25,6 +28,9 @@ type Client struct {
 	replay     ReplayCache
 	logger     *slog.Logger
 	retry      RetryPolicy
+	sleep      func(context.Context, time.Duration) error
+	now        func() time.Time
+	rand       func(int64) int64
 }
 
 // New builds a Client from opts (SDK-CLIENT-001): WithBaseURL is required,
@@ -56,6 +62,15 @@ func New(opts ...Option) (*Client, error) {
 	if c.logger == nil {
 		c.logger = slog.Default()
 	}
+	if c.sleep == nil {
+		c.sleep = defaultSleep
+	}
+	if c.now == nil {
+		c.now = time.Now
+	}
+	if c.rand == nil {
+		c.rand = defaultJitter
+	}
 	return c, nil
 }
 
@@ -70,7 +85,12 @@ func New(opts ...Option) (*Client, error) {
 // Responses classify per the Error catalog (SDK-RETRY-003): a retryable
 // status/code (wire.Retryable) costs one more attempt within
 // RetryPolicy.MaxAttempts, reusing the same key; anything terminal returns
-// immediately. A 2xx returns the response with its buffered body; any
+// immediately. Between attempts the loop backs off (SDK-RETRY-002):
+// Retry-After wins over an exponential, jittered schedule, everything is
+// capped at RetryPolicy.MaxDelay, and a cancelled context aborts the wait
+// promptly. Exhausting the budget on network errors or on retryable
+// statuses returns an error wrapping ErrOutcomeUnknown with the last
+// failure in the chain. A 2xx returns the response with its buffered body; any
 // other status surfaces as the one error type *wire.Error parsed from the
 // error envelope (SDK-CLIENT-003) — a non-envelope body carries the HTTP
 // status with an empty code, never a panic. Call options (WithResponseMeta)
@@ -100,18 +120,9 @@ func (c *Client) Do(ctx context.Context, req Request, opts ...CallOption) (*Resp
 			return nil, err
 		}
 	}
-	attempts := c.retry.MaxAttempts
-	if attempts < 1 {
-		attempts = 1
-	}
-	var out *Response
-	for attempt := 1; ; attempt++ {
-		if out, err = c.attempt(ctx, req, key); err != nil {
-			return nil, err
-		}
-		if attempt >= attempts || !retryableResponse(out) {
-			break
-		}
+	out, err := c.retryLoop(ctx, req, key, max(c.retry.MaxAttempts, 1))
+	if err != nil {
+		return nil, err
 	}
 	meta := out.Header.Clone()
 	if key != "" {
@@ -137,17 +148,22 @@ func retryableResponse(resp *Response) bool {
 // attempt executes one network attempt of req under the given
 // Idempotency-Key: it signs a fresh ks-party+jwt when the route is
 // AuthParty (ADR-008 — the key identifies the operation, the jti the
-// attempt), builds the request against the base URL, sends it through the
-// injected *http.Client, and buffers the response body. Logged via the
-// injected logger — method, path, status, request_id only (PRD §8).
+// attempt; WithReplayCache reserves the jti first, failing the attempt
+// before network I/O on a reservation error or duplicate), builds the
+// request against the base URL, sends it through the injected
+// *http.Client, and buffers the response body. Transport failures are
+// wrapped with errNetwork so the retry loop recognises them as retry
+// candidates; every other failure is terminal. Logged via the injected
+// logger — method, path, status, request_id only (PRD §8).
 // Parameters: ctx — the call context; req — the outbound request; key —
 // the Idempotency-Key to send, empty sends none. Returns: the response
-// with its buffered body, or an error (signing, build, transport, read).
+// with its buffered body, or an error (signing, reservation, build,
+// transport, read).
 func (c *Client) attempt(ctx context.Context, req Request, key string) (*Response, error) {
 	token := ""
 	if req.Auth == wire.AuthParty {
 		var err error
-		if token, err = c.signPartyRequest(); err != nil {
+		if token, err = c.signAttempt(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -170,7 +186,7 @@ func (c *Client) attempt(ctx context.Context, req Request, key string) (*Respons
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		c.logger.ErrorContext(ctx, "gateway request failed", "method", req.Method, "path", req.Path)
-		return nil, fmt.Errorf("client: %s %s: %w", req.Method, req.Path, err)
+		return nil, fmt.Errorf("client: %s %s: %w: %w", req.Method, req.Path, errNetwork, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
