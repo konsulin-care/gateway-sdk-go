@@ -62,11 +62,16 @@ func New(opts ...Option) (*Client, error) {
 // Do executes one attempt of req against the base URL (SDK-CLIENT-001),
 // honouring ctx: a cancelled context aborts with a context error. AuthParty
 // signs a fresh ks-party+jwt per attempt (iss = party id, aud = gateway,
-// exact typ) and fails with ErrNoSigner before any network I/O. Logged via
+// exact typ) and fails with ErrNoSigner before any network I/O. A 2xx
+// returns the response with its buffered body; any other status surfaces
+// as the one error type *wire.Error parsed from the error envelope
+// (SDK-CLIENT-003) — a non-envelope body carries the HTTP status with an
+// empty code, never a panic. Call options (WithResponseMeta) observe
+// every completed response, on success and failure alike. Logged via
 // the injected logger — method, path, status, request_id only, never bodies
 // or tokens (PRD §8). Returns: the response with its buffered body, or an
 // error.
-func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
+func (c *Client) Do(ctx context.Context, req Request, opts ...CallOption) (*Response, error) {
 	switch {
 	case ctx == nil:
 		return nil, errors.New("client: nil context")
@@ -74,6 +79,10 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 		return nil, errors.New("client: request method must not be empty")
 	case !strings.HasPrefix(req.Path, "/"):
 		return nil, fmt.Errorf("client: request path %q must start with /", req.Path)
+	}
+	cc, err := applyCallOptions(opts)
+	if err != nil {
+		return nil, err
 	}
 	token := ""
 	if req.Auth == wire.AuthParty {
@@ -113,5 +122,8 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 	}
 	c.logger.InfoContext(ctx, "gateway response", "method", req.Method, "path", req.Path,
 		"status", resp.StatusCode, "request_id", resp.Header.Get("X-Request-Id"))
-	return &Response{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: body}, nil
+	out := &Response{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: body}
+	cc.capture(ResponseMeta{Status: out.StatusCode, RequestID: resp.Header.Get("X-Request-Id"),
+		Header: out.Header.Clone()})
+	return outcome(out)
 }
