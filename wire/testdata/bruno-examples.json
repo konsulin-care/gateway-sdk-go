@@ -1,0 +1,200 @@
+{
+  "EnrollPartyRequest": {
+    "enrollment_token": "b7f3c9...",
+    "public_key": "cHVibGlja2V5...",
+    "kid": "kid-1",
+    "alg": "Ed25519",
+    "enc_public_key": "WDI1NTE5..."
+  },
+  "EnrollPartyResponse": {
+    "party_id": "01HZY...",
+    "kid": "kid-1"
+  },
+  "RotateKeyRequest": {
+    "public_key": "{{partyRotatedPublicKey}}",
+    "kid": "qc-party-kid-2"
+  },
+  "RotateKeyResponse": {
+    "kid": "qc-party-kid-2"
+  },
+  "JWK": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "kid": "qc-party-kid-1",
+    "x": "<43-char base64url>",
+    "alg": "EdDSA",
+    "use": "sig"
+  },
+  "JWKSResponse": {
+    "keys": [
+      {"kty": "OKP", "crv": "Ed25519", "kid": "qc-party-kid-1", "x": "<43-char base64url>", "alg": "EdDSA", "use": "sig"},
+      {"kty": "EC", "crv": "P-256", "kid": "qc-party-kid-es256", "x": "<43-char base64url>", "y": "<43-char base64url>", "alg": "ES256", "use": "sig"}
+    ]
+  },
+  "PartyHealthResponse": {
+    "status": "healthy"
+  },
+  "GatewayHealthResponse": {
+    "status": "ok",
+    "version": "1.4.2"
+  },
+  "RegisterIdentityRequest": {
+    "party_id": "01HZX...",
+    "resource_type": "patient",
+    "local_resource_id": "fixture-patient-001",
+    "email_hash": "{{emailHashFixture}}",
+    "phone_hash": "N/A"
+  },
+  "RegisterIdentityResponse": {
+    "global_key": "01HZY..."
+  },
+  "ResolveIdentityRequest": {
+    "email_hash": "{{emailHashFixture}}",
+    "phone_hash": "N/A"
+  },
+  "ResolveIdentityResponse": {
+    "candidates": [
+      {"global_key": "01HZY...", "party_id": "01HZX...", "local_resource_id": "fixture-patient-001", "match_field": "email"}
+    ]
+  },
+  "LinkIdentityRequest": {
+    "global_key": "{{globalKey}}",
+    "party_id": "{{partyId}}",
+    "local_resource_id": "fixture-patient-001"
+  },
+  "LinkIdentityResponse": {
+    "linked": true
+  },
+  "MintApprovalRequest": {
+    "to": "{{partyId}}",
+    "scope": "referral",
+    "purpose": "qc-approval-purpose",
+    "ttl": 3600,
+    "researcher_hash": "{{emailHashFixture}}"
+  },
+  "MintApprovalResponse": {
+    "access_token": "eyJhbGciOiJFZERTQSIsImtpZCI6InFxLXBhcnR5LWtpZC0xIn0...",
+    "jti": "01HZY...",
+    "expires_at": "2026-12-31T12:00:00Z"
+  },
+  "CreateListingRequest": {
+    "name": "qc-webhook-acme-1",
+    "description": "Self-probe listing: invocation lands on the gateway's own /health",
+    "endpoint_url": "https://gateway.example.com/health",
+    "price": 0,
+    "invocation": "webhook",
+    "price_scope": "user"
+  },
+  "CreateListingResponse": {
+    "listing_id": "01HZY...",
+    "state": "active"
+  },
+  "ListingRow": {
+    "listing_id": "01HZYLISTING1",
+    "provider_party_id": "01HZXPROVIDER",
+    "name": "Curated pseudonymized research data",
+    "description": "De-identified cohort extract, consent-gated",
+    "endpoint_url": "https://clinician.example.com/api/research/access",
+    "price": 53200,
+    "currency": "IDR",
+    "invocation": "commodity",
+    "price_scope": "party",
+    "metering": "gateway",
+    "provider_tier": "konsulin",
+    "provider_org_name": "Konsulin Clinic"
+  },
+  "GetListingsResponse": {
+    "listings": [
+      {
+        "listing_id": "01HZYLISTING1",
+        "provider_party_id": "01HZXPROVIDER",
+        "name": "Curated pseudonymized research data",
+        "description": "De-identified cohort extract, consent-gated",
+        "endpoint_url": "https://clinician.example.com/api/research/access",
+        "price": 53200,
+        "currency": "IDR",
+        "invocation": "commodity",
+        "price_scope": "party",
+        "metering": "gateway",
+        "provider_tier": "konsulin",
+        "provider_org_name": "Konsulin Clinic"
+      },
+      {
+        "listing_id": "01HZYLISTING2",
+        "provider_party_id": "01HZXPROVIDER",
+        "name": "qc-webhook-acme-1",
+        "description": "Self-probe listing: invocation lands on the gateway's own /health",
+        "price": 0,
+        "currency": "IDR",
+        "invocation": "webhook",
+        "price_scope": "user",
+        "metering": "provider"
+      }
+    ]
+  },
+  "CreatePaymentRequest": {
+    "listing_id": "{{listingId}}",
+    "customer_ref": "qc-user-hash-{{operatorUsername}}"
+  },
+  "CreatePaymentResponse": {
+    "payment_id": "01HZY...",
+    "payment_url": "https://checkout.xendit.co/web/ps-661f87c614802d6c402cd82d",
+    "amount": 53200,
+    "currency": "IDR",
+    "expires_at": "2026-12-31T23:59:59Z",
+    "payment_session_id": "ps-661f87c614802d6c402cd82d",
+    "status": "PENDING"
+  },
+  "GetPaymentResponse": {
+    "payment_id": "01HZY...",
+    "status": "PAID",
+    "amount": 0,
+    "currency": "IDR",
+    "payment_session_id": null,
+    "created_at": "2026-12-31T23:58:00Z",
+    "expires_at": null
+  },
+  "AccessTokenResponse": {
+    "access_token": "eyJhbGciOiJFZERTQSIsImtpZCI6Imd3LWtleS0xIn0...",
+    "expires_at": "2026-12-31T12:14:00Z"
+  },
+  "EnqueueWebhookRequest": {
+    "to": "{{partyId}}",
+    "service": "qc-webhook-{{operatorUsername}}",
+    "user_ref": "qc-user-hash-{{operatorUsername}}",
+    "payload": {"template": "qc", "note": "self-probe via /health"}
+  },
+  "EnqueueWebhookResponse": {
+    "webhook_id": "01JAV3Q6R7K9X2M4N8P0Q1S5T7"
+  },
+  "SyncWebhookRequest": {
+    "to": "{{partyId}}",
+    "service": "qc-webhook-{{operatorUsername}}",
+    "user_ref": "qc-user-hash-{{operatorUsername}}",
+    "payload": {"template": "qc-sync"}
+  },
+  "SyncWebhookResponse": {
+    "status_code": 200,
+    "body": "{\"status\":\"healthy\"}",
+    "content_type": "application/json",
+    "webhook_id": "01JAV3Q6R7K9X2M4N8P0Q1S5T7"
+  },
+  "WebhookStatusResponse": {
+    "state": "delivered",
+    "attempts": 1,
+    "next_attempt_at": "2026-12-31T12:00:00Z",
+    "created_at": "2026-12-31T11:59:59Z"
+  },
+  "WebhookResultRequest": {
+    "result": "qc-result-probe"
+  },
+  "WebhookResultResponse": {
+    "status": "accepted"
+  },
+  "ServiceReceiptBody": {
+    "webhook_id": "01HZY...",
+    "status": 200,
+    "quota_remaining": "4",
+    "body": "{\"consumed\":true}"
+  }
+}

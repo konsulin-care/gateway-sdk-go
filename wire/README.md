@@ -20,7 +20,12 @@ SDK-CLIENT-003, SDK-RETRY-002/003 (classification), and SDK-API-001.
 - `retry.go` — `Retryable` / `RequiresNewIdempotencyKey` classification from the catalog (ADR-011, ADR-012)
 - `dto_parties.go`, `dto_identities.go`, `dto_approvals.go`, `dto_listings.go`,
   `dto_payments.go`, `dto_webhooks.go` — route DTOs, JSON tags byte-matching the Bruno examples
-- `*_test.go` — catalog and DTO shape tests
+- `routes.go` — `RouteTable()`: the normative §9.6 route table, the 19
+  party-facing rows with verb, path, auth class and idempotency flag (SDK-API-001)
+- `testdata/bruno-examples.json` — one mirrored Bruno example body per route
+  DTO (in-module mirror only; tests never read `../gateway`, ADR-004)
+- `*_test.go` — catalog, DTO shape (round-trip, required keys, unknown-field
+  decode) and route-table tests
 
 **Built by**: `docs/tasks/01-foundation-test-kit.md` (typ/purpose/capability
 constants, `*wire.Error`, error catalog); DTOs extended in
