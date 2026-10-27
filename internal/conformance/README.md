@@ -14,10 +14,13 @@ packages (plus `internal/adminboot` for setup).
 **Related requirements**: SDK-CONF-001, SDK-CONF-002, SDK-CONF-003,
 SDK-CONF-C01.
 
-**Planned files**:
-- `runner.go` — case execution, named failures, non-zero exit on mismatch
-- `positive.go` — QC-chain happy paths
+**Files**:
+- `registry.go` — ordered case registry (Kind, Case, Env, `Registry()`)
+- `positive.go` — QC-chain happy paths (SDK-CONF-001)
 - `negative.go` — SDK-CONF-002 deny cases
-- `conformance_test.go` — case registry tests
+- `callback.go` — plain-HTTP result-callback receiver
+- `doc.go` — package doc plus the shared case helpers (client builders, probes)
+- `conformance_test.go` — QC-chain registry and import tests
+- `cases_test.go` — negative-case and callback-receiver tests
 
 **Built by**: `docs/tasks/04-integration-and-release.md`.

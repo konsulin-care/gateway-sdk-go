@@ -1,0 +1,155 @@
+package conformance
+
+import (
+	"context"
+	"crypto/ed25519"
+	"net/http"
+)
+
+// Kind classifies a conformance case: a positive QC-chain step or a
+// negative deny observation.
+type Kind string
+
+// The two case kinds the registry distinguishes.
+const (
+	// KindPositive marks a QC-chain happy-path step (SDK-CONF-001).
+	KindPositive Kind = "positive"
+	// KindNegative marks a deny observation (SDK-CONF-002).
+	KindNegative Kind = "negative"
+)
+
+// Case is one named conformance case: its unique name, its kind, and
+// the run function executed against a target. Run returns nil when the
+// case passes and a non-nil error naming the case (and the mismatch)
+// when it fails — the runner turns that into the non-zero exit of
+// SDK-CONF-C01.
+type Case struct {
+	// Name is the unique case name surfaced in reports and failures.
+	Name string
+	// Kind is the case kind (positive or negative).
+	Kind Kind
+	// Run executes the case against env; nil is pass, non-nil is fail.
+	Run func(ctx context.Context, env *Env) error
+}
+
+// Env is the conformance target environment every case runs against:
+// the live gateway base URL, its HTTP client, the bootstrap party
+// context the positive chain threads between steps, and the plain-HTTP
+// callback receiver the result-callback case observes.
+type Env struct {
+	// BaseURL is the live gateway base URL (scheme://host[:port]).
+	BaseURL string
+	// HTTP is the client every request is issued through (nil selects
+	// http.DefaultClient).
+	HTTP *http.Client
+	// PartyID is the QC-chain party; the bootstrap case fills it and
+	// later positive steps consume it.
+	PartyID string
+	// EnrollmentToken is the single-use token the bootstrap case
+	// issues and the enrollment step consumes.
+	EnrollmentToken string
+	// AdminUser is the operator username for the admin bootstrap.
+	AdminUser string
+	// AdminPass is the operator password for the admin bootstrap.
+	AdminPass string
+	// Priv is the QC-chain party's active Ed25519 signing key: the
+	// enrollment case registers it, the rotation case installs a fresh
+	// replacement, and the signed party routes sign with it. Bootstrap
+	// leaves it unset.
+	Priv ed25519.PrivateKey
+	// ListingID is the free listing the listings case creates and the
+	// payment-paid case purchases. Empty until the listings step runs.
+	ListingID string
+	// Callback is the plain-HTTP result receiver; the result-callback
+	// case passes only after at least one inbound delivery is recorded.
+	Callback *CallbackReceiver
+}
+
+// client returns the env's HTTP client, selecting the default when unset.
+func (e *Env) client() *http.Client {
+	if e != nil && e.HTTP != nil {
+		return e.HTTP
+	}
+	return http.DefaultClient
+}
+
+// QCChainNames is the SDK-CONF-001 QC-chain step list in chain order:
+// gateway health, admin bootstrap (login → create party → issue
+// enrollment token), then enrollment, rotation, JWKS, identities,
+// approvals, listings, the free-listing payment reaching PAID,
+// webhooks, and the result callback.
+var QCChainNames = []string{
+	"health",
+	"bootstrap",
+	"enrollment",
+	"rotation",
+	"jwks",
+	"identities",
+	"approvals",
+	"listings",
+	"payment-paid",
+	"webhooks",
+	"result-callback",
+}
+
+// NegativeNames is the SDK-CONF-002 negative case list in registry
+// order: wrong signing key, replayed enrollment token, wrong typ,
+// body_sha256 mismatch, expired token, unknown kid after one refetch,
+// revoked party, missing capability (capability_denied), and
+// idempotency replay (byte-identical response).
+var NegativeNames = []string{
+	"wrong-signing-key",
+	"replayed-enrollment-token",
+	"wrong-typ",
+	"body-sha256-mismatch",
+	"expired-token",
+	"unknown-kid",
+	"revoked-party",
+	"capability-denied",
+	"idempotency-replay",
+}
+
+// positiveCases builds the ordered positive QC-chain cases.
+func positiveCases() []Case {
+	return []Case{
+		{Name: "health", Kind: KindPositive, Run: runHealth},
+		{Name: "bootstrap", Kind: KindPositive, Run: runBootstrap},
+		{Name: "enrollment", Kind: KindPositive, Run: runEnrollment},
+		{Name: "rotation", Kind: KindPositive, Run: runRotation},
+		{Name: "jwks", Kind: KindPositive, Run: runJWKS},
+		{Name: "identities", Kind: KindPositive, Run: runIdentities},
+		{Name: "approvals", Kind: KindPositive, Run: runApprovals},
+		{Name: "listings", Kind: KindPositive, Run: runListings},
+		{Name: "payment-paid", Kind: KindPositive, Run: runPaymentPaid},
+		{Name: "webhooks", Kind: KindPositive, Run: runWebhooks},
+		{Name: "result-callback", Kind: KindPositive, Run: runResultCallback},
+	}
+}
+
+// negativeCases builds the ordered SDK-CONF-002 deny cases.
+func negativeCases() []Case {
+	return []Case{
+		{Name: "wrong-signing-key", Kind: KindNegative, Run: negativeWrongSigningKey},
+		{Name: "replayed-enrollment-token", Kind: KindNegative, Run: negativeReplayedEnrollmentToken},
+		{Name: "wrong-typ", Kind: KindNegative, Run: negativeWrongTyp},
+		{Name: "body-sha256-mismatch", Kind: KindNegative, Run: negativeBodySHA256Mismatch},
+		{Name: "expired-token", Kind: KindNegative, Run: negativeExpiredToken},
+		{Name: "unknown-kid", Kind: KindNegative, Run: negativeUnknownKid},
+		{Name: "revoked-party", Kind: KindNegative, Run: negativeRevokedParty},
+		{Name: "capability-denied", Kind: KindNegative, Run: negativeCapabilityDenied},
+		{Name: "idempotency-replay", Kind: KindNegative, Run: negativeIdempotencyReplay},
+	}
+}
+
+// Registry returns the full ordered case registry: the positive
+// QC-chain steps in SDK-CONF-001 chain order followed by the negative
+// SDK-CONF-002 cases. Every name is unique; the returned slice is a
+// fresh copy and mutating it never affects the package.
+func Registry() []Case {
+	pos := positiveCases()
+	neg := negativeCases()
+	out := make([]Case, 0, len(pos)+len(neg))
+	out = append(out, pos...)
+	out = append(out, neg...)
+	return out
+}
