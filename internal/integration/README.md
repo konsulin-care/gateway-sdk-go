@@ -12,6 +12,22 @@ packages, and `gatewaytest`.
 
 **Files** (actual):
 - `doc.go` — package doc
+- `main_test.go` — `TestMain` (transport guard refusing non-loopback
+  dials, probed by `TestMainInstallsLoopbackOnlyDial`), the shared
+  `fixture` (gatewaytest server, minter + JWKS, deterministic
+  `ReplayCache`, verifier, party client) and
+  `TestIntegrationFlowsOffline` (enroll → signed-calls → exchange →
+  callback as subtests)
+- `enroll_test.go` — `runEnrollFlow`: RFC 7638 kid, PoP `body_sha256`
+  over the exact POST bytes, `parties.Enroll` success
+- `signed_calls_test.go` — `runSignedCallsFlow`: distinct jti per
+  attempt, 409→200 reuses one Idempotency-Key, new key only after a
+  terminal 402 (ADR-011)
+- `exchange_test.go` — `runExchangeFlow`: `approvals.Mint` ticket passes
+  the recipient's six-rule check; `envelope.Seal` → `Open` byte-identical
+- `callback_test.go` — `runCallbackFlow`: delivery through `verify`
+  middleware, `webhook_id` duplicate rejection, payment-required and
+  service-receipt `ks-event+jwt` acceptance
 - `routes_test.go` — `TestRouteTableRowsThroughTypedFunctions` (phase 3):
   one typed invoker per `wire.RouteTable()` row (19 invokers keyed
   `package/Method`), asserting the recorded verb/path, an
@@ -19,12 +35,6 @@ packages, and `gatewaytest`.
   `Authorization` on public rows, and a `ks-party+jwt` bearer on party
   rows (`requireKSPartyBearer`, `pathID`, `routeFixture`)
 
-**Planned in phase 4** (`docs/tasks/04-integration-and-release.md`):
-- `enroll_test.go` — enrollment with proof of possession
-- `signed_calls_test.go` — party-authenticated calls, retry/idempotency
-- `exchange_test.go` — approval + direct exchange with `envelope`
-- `callback_test.go` — webhook delivery through `verify` middleware
-- `main_test.go` — shared offline setup
-
 **Built by**: `docs/tasks/03-client-and-routes.md` (routes_test.go),
-`docs/tasks/04-integration-and-release.md` (phase-4 suites).
+`docs/tasks/04-integration-and-release.md` (SDK-TEST-002: main, enroll,
+signed_calls, exchange, callback).
