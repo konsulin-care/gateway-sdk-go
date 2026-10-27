@@ -8,7 +8,7 @@ every `go test ./...` and on every PR (CI job `e2e-offline`).
 **Allowed imports** (PRD §7 dependency rules): standard library, public SDK
 packages, and `gatewaytest`.
 
-**Related requirements**: SDK-TEST-002.
+**Related requirements**: SDK-TEST-002, SDK-README-001.
 
 **Files** (actual):
 - `doc.go` — package doc
@@ -34,7 +34,14 @@ packages, and `gatewaytest`.
   `Idempotency-Key` on every flagged row and none elsewhere, no
   `Authorization` on public rows, and a `ks-party+jwt` bearer on party
   rows (`requireKSPartyBearer`, `pathID`, `routeFixture`)
+- `readme_test.go` — `TestReadmeRecipesMatchPublicAPI` (SDK-README-001):
+  extracts the five tagged Go recipe blocks from the root `README.md`
+  (enrollment, signed-calls, callback, exchange, pepper) and asserts each
+  matches its `Example_*` body after whitespace normalization; the pepper
+  block must open the sealed JWE via `envelope.Open` and write nothing to
+  disk or env. Holds the five offline `Example_*` recipes themselves
+  (runnable via `go test -run Example`).
 
 **Built by**: `docs/tasks/03-client-and-routes.md` (routes_test.go),
 `docs/tasks/04-integration-and-release.md` (SDK-TEST-002: main, enroll,
-signed_calls, exchange, callback).
+signed_calls, exchange, callback; SDK-README-001: readme_test.go).
