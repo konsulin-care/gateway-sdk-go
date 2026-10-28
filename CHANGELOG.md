@@ -13,6 +13,9 @@ the same PR.
 First release: the complete PRD (PROPOSAL.md) surface. Released under the
 ADR-009 gate — green CI, green offline e2e, and green conformance against a
 development-mode throwaway gateway (see [COMPATIBILITY.md](COMPATIBILITY.md)).
+The `v0.1.0` tag is applied only to a `master` commit where CI — `quality`,
+`e2e-offline`, and `e2e-gateway` conformance — is green; tagging is a manual
+maintainer step, never automated (SDK-CONF-003).
 
 ### Added
 
@@ -58,7 +61,9 @@ development-mode throwaway gateway (see [COMPATIBILITY.md](COMPATIBILITY.md)).
 - `internal/adminboot`, `internal/conformance`, `cmd/conformance` — the
   conformance runner: QC-chain positive flows, the SDK-CONF-002 negative
   cases, exit codes 0/1/2 with the failing case named, and a build-info
-  version (SDK-CONF-001…003, SDK-CONF-C01).
+  version (SDK-CONF-001…003, SDK-CONF-C01). The runner shipped in this
+  release reports version `v0.1.0`, versioned with the module and matching
+  this SDK tag (SDK-CONF-003).
 - `testdata/golden` — contract vectors mirrored from the gateway with a
   hash manifest; `mise run qc --mirror-check` is the local drift check
   (ADR-004).

@@ -20,10 +20,18 @@ together.
   exact contract the SDK verifier was built and tested against.
 - **Runner versioning**: the conformance runner ships inside this module and
   carries the module's `v0.x` tags (SDK-CONF-003). Each SDK tag names a
-  matching runner version in this table. Once v0.1.0 exists, the gateway
-  pins the runner version in `qc --flow` (gateway-side, M5 follow-up); until
-  then, drift is caught by this repo's own CI — the e2e-gateway job runs the
-  in-repo runner against the current gateway image on every PR and weekly.
+  matching runner version in this table — the `v0.1.0` tag ships runner
+  `v0.1.0` (`go run ./cmd/conformance -version`). Once v0.1.0 exists, the
+  gateway pins the runner version in `qc --flow` (gateway-side, M5
+  follow-up); until then, drift is caught by this repo's own CI — the
+  e2e-gateway job runs the in-repo runner against the current gateway image
+  on every PR and weekly.
+- **Release gate**: an SDK tag is cut only from a `master` commit with green
+  CI — the `quality`, `e2e-offline`, and `e2e-gateway` conformance jobs
+  (ADR-009; `docs/ARCHITECTURE.md` §7). Tagging is a manual maintainer step,
+  never automated, and happens only after the green run. The tag PR updates
+  this table and [CHANGELOG.md](CHANGELOG.md) together so both carry the
+  matching conformance-runner version for the tag.
 - **Conformance target**: the runner's supported target is a
   **development-mode** gateway (as started by `scripts/e2e-gateway.sh
   --conformance`). Production gateways reject the plain-HTTP callback
