@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       image:
-        description: Gateway container image to smoke test
+        description: Gateway container image to exercise
         type: string
         default: ghcr.io/konsulin-care/konsulin-gateway:latest
 
@@ -35,10 +35,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Smoke now; phase 4 extends the job with cmd/conformance against the
-      # same throwaway gateway. The image is passed via env only, never
-      # interpolated into run:.
-      - name: Smoke the throwaway gateway
+      # Conformance mode: the harness starts the throwaway gateway in
+      # development mode (no admin TOTP secret, raised rate limits) and runs
+      # go run ./cmd/conformance against it; the container is removed even
+      # on failure. The image is passed via env only, never interpolated
+      # into run:.
+      - name: Run conformance against the throwaway gateway
         env:
           GATEWAY_IMAGE: ${{ inputs.image }}
-        run: mise run e2e-gateway --smoke
+        run: mise run e2e-gateway --conformance

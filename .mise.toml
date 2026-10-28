@@ -17,5 +17,5 @@ description = "Offline integration e2e: go test -race ./internal/integration/...
 run = "go test -race ./internal/integration/..."
 
 [tasks.e2e-gateway]
-description = "Throwaway gateway e2e: --start --health --stop --smoke (pinned private ghcr image, never production)"
+description = "Throwaway gateway e2e (pinned private ghcr image, never production): --smoke production mode; --conformance development mode + go run ./cmd/conformance"
 run = "bash scripts/e2e-gateway.sh"

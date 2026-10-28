@@ -15,17 +15,21 @@ import (
 // httptest server serving one canned example response per §9.6
 // route-table row, recording every request, replaying idempotent creates
 // by Idempotency-Key, and serving scripted response sequences for retry
-// tests. Every path outside the route table (admin routes, the operator
-// DLQ view, auth:provider reference contracts) answers 404 by
+// tests. Every path outside the route table (the operator DLQ view,
+// auth:provider reference contracts, and — unless the opt-in admin
+// fakes are enabled via EnableAdmin — every admin route) answers 404 by
 // construction. Safe for concurrent use; zero network beyond the local
 // loopback listener.
 type Gateway struct {
-	server   *httptest.Server
-	mu       sync.Mutex
-	idem     map[string]*idemEntry
-	scripts  map[routeKey][]ScriptStep
-	gates    map[routeKey]*Gate
-	recorded []RecordedRequest
+	server     *httptest.Server
+	mu         sync.Mutex
+	idem       map[string]*idemEntry
+	scripts    map[routeKey][]ScriptStep
+	gates      map[routeKey]*Gate
+	admin      *adminConfig
+	jtiEnforce bool
+	jtiSeen    map[string]struct{}
+	recorded   []RecordedRequest
 }
 
 // NewGateway starts the fake gateway and returns it ready to use. The
@@ -86,10 +90,11 @@ type RecordedRequest struct {
 	Body []byte
 }
 
-// serveHTTP records the request, then dispatches it: 404 outside the
-// route table, then a queued scripted step when one exists, then the
-// idempotency store when an Idempotency-Key header is present, then the
-// route's canned example.
+// serveHTTP records the request, then dispatches it: the opt-in admin
+// fake when one matches, 404 outside the route table, then a queued
+// scripted step when one exists, then the opt-in single-use jti check
+// when enabled, then the idempotency store when an Idempotency-Key
+// header is present, then the route's canned example.
 func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -100,12 +105,19 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	g.recorded = append(g.recorded, newRecordedRequest(r, body))
 	g.mu.Unlock()
 
+	if cfg := g.adminEnabled(); cfg != nil && g.serveAdmin(w, r, body, cfg) {
+		return
+	}
+
 	key, ok := matchRoute(r.Method, r.URL.Path)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
 	if g.serveScripted(w, key) {
+		return
+	}
+	if g.serveJTIReplay(w, r) {
 		return
 	}
 	if idemKey := r.Header.Get("Idempotency-Key"); idemKey != "" {
