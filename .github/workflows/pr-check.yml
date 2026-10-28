@@ -67,3 +67,7 @@ jobs:
           # Inline PR review comments on PRs; plain pass/fail elsewhere
           # (push, dispatch) where there is no PR to comment on.
           reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'local' }}
+          # The local reporter plus file filtering needs a -diff command
+          # (reviewdog errors with "diff command is empty"); off-PR there is
+          # no PR base to diff against, so skip filtering there.
+          filter_mode: ${{ github.event_name == 'pull_request' && 'file' || 'nofilter' }}
