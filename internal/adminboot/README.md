@@ -11,7 +11,8 @@ routes in the public surface).
 
 **Related requirements**: SDK-CONF-001.
 
-**Planned files**:
+**Files** (actual):
+- `doc.go` — package doc
 - `login.go` — admin session login
 - `parties.go` — party creation and enrollment-token issuance
 - `capabilities.go` — capability grants

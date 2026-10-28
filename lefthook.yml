@@ -4,7 +4,8 @@
 # local gate and the CI gate are the same checks:
 #   pre-commit  staged scope (qc.sh auto-detects via LEFTHOOK), parallel jobs
 #   pre-push    full-tree scope (QC_SCOPE=all), slower checks in sequence
-# No commit-msg hook (DCO deferred until the first external contribution).
+# No commit-msg hook: DCO sign-off (git commit -s) is enforced in CI by
+# .github/workflows/dco.yml on every PR commit (CONTRIBUTING.md).
 pre-commit:
   parallel: true
   jobs:

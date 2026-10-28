@@ -82,7 +82,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-VERIFY-001` — JWKS cache: kid-only selection, one bounded refetch
 
-- [ ] **Behavior**: TTL-cached gateway JWKS; keys selected only by the
+- [x] **Behavior**: TTL-cached gateway JWKS; keys selected only by the
   token's own header `kid`; at most one rate-limited refetch per unknown
   `kid` inside the window, then fail closed.
 - **Accept**: a token under any JWKS key verifies against a cache hit;
@@ -97,7 +97,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-VERIFY-002` — per-kind checks for all six kinds
 
-- [ ] **Behavior**: exact `typ`, `iss`, `aud`, `exp` (60 s skew),
+- [x] **Behavior**: exact `typ`, `iss`, `aud`, `exp` (60 s skew),
   `body_sha256` over the exact POST bytes on delivery/event tokens, and
   required `purpose`/`webhook_id`/`jti` claims per Token Kinds row.
   `ks-event+jwt` accepts exactly four purposes — `settlement-notification`,
@@ -114,7 +114,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-VERIFY-003` — callback middleware
 
-- [ ] **Behavior**: `verify.Middleware` wraps `http.Handler`, buffers the
+- [x] **Behavior**: `verify.Middleware` wraps `http.Handler`, buffers the
   raw body exactly once, dedupes `webhook_id` (or `jti`) through
   `ReplayCache`, hands the handler verified claims + original bytes.
 - **Accept**: one buffered read; the handler receives the verified claims
@@ -126,7 +126,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-VERIFY-004` — the six Recipient Verification Rules verbatim
 
-- [ ] **Behavior**: (1) signature against gateway JWKS, key by header
+- [x] **Behavior**: (1) signature against gateway JWKS, key by header
   `kid`, one refetch then deny; (2) exact `typ` per operation
   (`ks-approval+jwt` handoff, `ks-access+jwt` payment ticket); (3)
   `aud` = self and `iss` = gateway; (4) `exp` within 60 s skew; (5)
@@ -143,7 +143,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-VERIFY-C01` — deny matrix + rotation acceptance
 
-- [ ] **Behavior**: the composite acceptance criterion of §9.3.
+- [x] **Behavior**: the composite acceptance criterion of §9.3.
 - **Accept**: a post-rotation token verifies once the JWKS (current +
   previous) is loaded.
 - **Deny**: expired, replayed, foreign-aud, wrong-typ, and body-mutated
@@ -153,7 +153,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-ID-001` — normalization + `hashfmt` HMAC hashes
 
-- [ ] **Behavior**: email lowercase + trim, phone E.164,
+- [x] **Behavior**: email lowercase + trim, phone E.164,
   `HMAC-SHA256(normalized, pepper)` as standard base64 of exactly 32
   bytes, or the `N/A` marker for a non-applicable field (gateway ADR-005).
 - **Accept**: fixture inputs hash to the expected base64 (fixed test
@@ -165,7 +165,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-ID-002` — format validation mirrors the gateway reject rule
 
-- [ ] **Behavior**: validate a hash as marker **or** standard base64 of
+- [x] **Behavior**: validate a hash as marker **or** standard base64 of
   exactly 32 bytes.
 - **Accept**: the marker and well-formed 32-byte base64 validate.
 - **Deny**: wrong length, bad base64, or raw bytes reject before any
@@ -175,7 +175,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-ID-C01` — shared fixture vectors
 
-- [ ] **Behavior**: the shared input → expected-hash vectors pass with a
+- [x] **Behavior**: the shared input → expected-hash vectors pass with a
   fixed pepper (same vectors the backend adapter uses).
 - **Accept**: every fixture row matches byte for byte.
 - **Deny**: a single altered input/expectation fails the vector test.
@@ -183,7 +183,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-ENV-001` — `Seal` per the normative JWE Envelope
 
-- [ ] **Behavior**: compact JWE with `alg: ECDH-ES`, `enc: A256GCM`,
+- [x] **Behavior**: compact JWE with `alg: ECDH-ES`, `enc: A256GCM`,
   fresh ephemeral X25519 `epk` per message, protected-header `kid`,
   empty encrypted-key segment, Concat KDF (SHA-256, `AlgorithmID =
   "A256GCM"`, empty `apu`/`apv`, `keydatalen = 256`), AAD = encoded
@@ -197,7 +197,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-ENV-002` — recipient `use:enc` discovery
 
-- [ ] **Behavior**: discover the recipient's `use:enc` key from
+- [x] **Behavior**: discover the recipient's `use:enc` key from
   `GET /v1/parties/{id}/jwks`, select by JWE header `kid`.
 - **Accept**: the recipient's published `use:enc` key seals a payload the
   recipient can open.
@@ -208,7 +208,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-ENV-003` — `Open` through the caller's `Decrypter`
 
-- [ ] **Behavior**: open with the caller's X25519 private key; reject
+- [x] **Behavior**: open with the caller's X25519 private key; reject
   malformed envelope / wrong `alg`/`enc` / auth failure before any
   plaintext is used; plaintext lives in the returned buffer only.
 - **Accept**: a sealed payload opens to the original bytes.
@@ -219,7 +219,7 @@ authoring-time reference (AGENTS.md), never a test dependency. Re-run
 
 ### `SDK-ENV-C01` — RFC vector + round trip + tamper
 
-- [ ] **Behavior**: the composite acceptance criterion of §9.5.
+- [x] **Behavior**: the composite acceptance criterion of §9.5.
 - **Accept**: RFC 8037 A.6 vector passes; seal→open round trip is byte-
   identical.
 - **Deny**: a tampered ciphertext/tag fails.
@@ -251,16 +251,16 @@ Edit (only if the package contract changes):
 
 ## Definition of Done
 
-- [ ] Every checklist item's proving tests green; accept and deny
+- [x] Every checklist item's proving tests green; accept and deny
       expectations both asserted (deny = fail closed, never partial).
-- [ ] SDK-VERIFY-C01 deny matrix green; rotation acceptance green.
-- [ ] SDK-ID-C01 shared fixture vectors green offline.
-- [ ] SDK-ENV-C01 green: RFC 8037 A.6 passes, round trip byte-identical,
+- [x] SDK-VERIFY-C01 deny matrix green; rotation acceptance green.
+- [x] SDK-ID-C01 shared fixture vectors green offline.
+- [x] SDK-ENV-C01 green: RFC 8037 A.6 passes, round trip byte-identical,
       tampered ciphertext/tag fails.
-- [ ] Envelope fuzz target registered and smoke-run, no crashes.
-- [ ] `go test -race ./...` green with zero network and no test reading
+- [x] Envelope fuzz target registered and smoke-run, no crashes.
+- [x] `go test -race ./...` green with zero network and no test reading
       outside the module; `mise run qc` green.
-- [ ] Every new exported symbol has a doc comment; files ≤ 300 lines;
+- [x] Every new exported symbol has a doc comment; files ≤ 300 lines;
       complexity ≤ 15.
 
 ## Open items — closed

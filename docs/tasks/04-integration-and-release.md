@@ -31,7 +31,7 @@ test dependencies (AGENTS.md). Re-run `go test -race ./...` and
 
 ### `SDK-TEST-002` — offline integration against `gatewaytest`
 
-- [ ] **Behavior**: the backend adapter's integration points are testable
+- [x] **Behavior**: the backend adapter's integration points are testable
   against `gatewaytest` with zero network.
 - **Accept**: the five `internal/integration` flows (enroll → signed
   calls → approval → direct exchange → callback) run green with no
@@ -44,7 +44,7 @@ test dependencies (AGENTS.md). Re-run `go test -race ./...` and
 
 ### `SDK-CONF-001` — conformance runner against a live gateway
 
-- [ ] **Behavior**: `cmd/conformance` exercises the QC-chain party surface
+- [x] **Behavior**: `cmd/conformance` exercises the QC-chain party surface
   end to end, bootstrapping through the admin API
   (`POST /v1/admin/auth/login` → `POST /v1/admin/parties` →
   `POST /v1/admin/parties/{id}/enrollment-token`) in its own code, then
@@ -60,7 +60,7 @@ test dependencies (AGENTS.md). Re-run `go test -race ./...` and
 
 ### `SDK-CONF-002` — negative cases
 
-- [ ] **Behavior**: wrong signing key, replayed enrollment token,
+- [x] **Behavior**: wrong signing key, replayed enrollment token,
   wrong/missing `typ`, `body_sha256` mismatch, expired token, unknown
   `kid` after one refetch, revoked party, missing capability
   (`capability_denied`), idempotency replay (byte-identical response).
@@ -72,7 +72,7 @@ test dependencies (AGENTS.md). Re-run `go test -race ./...` and
 
 ### `SDK-CONF-C01` — one command, non-zero on mismatch
 
-- [ ] **Behavior**: a single command exits non-zero on any contract
+- [x] **Behavior**: a single command exits non-zero on any contract
   mismatch with the failing case named.
 - **Accept**: a green run exits 0 and names each executed case.
 - **Deny**: one mismatched case → non-zero exit, case name on stderr.
@@ -81,7 +81,7 @@ test dependencies (AGENTS.md). Re-run `go test -race ./...` and
 
 ### `SDK-CONF-003` — runner versioning
 
-- [ ] **Behavior**: the runner is versioned with `v0.x` module tags. The
+- [x] **Behavior**: the runner is versioned with `v0.x` module tags. The
   gateway-side `qc --flow` pin is **after v0.1.0, M5, gateway work** —
   not this repo's deliverable here.
 - **Accept**: each SDK tag carries a matching runner version (checked at
@@ -94,7 +94,7 @@ test dependencies (AGENTS.md). Re-run `go test -race ./...` and
 
 ### `SDK-README-001` — runnable recipes
 
-- [ ] **Behavior**: README carries runnable recipes for enrollment, signed
+- [x] **Behavior**: README carries runnable recipes for enrollment, signed
   calls, callback middleware, direct exchange, and fetching the
   federation pepper (enqueue/sync-invoke the `federation-pepper`
   listing, keep the sealed JWE as received, `envelope.Open` at startup
@@ -173,23 +173,23 @@ Edit:
 
 ## Definition of Done
 
-- [ ] Every checklist item's proving test (or gate) green; accept and
+- [x] Every checklist item's proving test (or gate) green; accept and
       deny expectations both asserted.
-- [ ] `go test -race ./internal/integration/...` green offline and wired
+- [x] `go test -race ./internal/integration/...` green offline and wired
       as the CI `e2e-offline` job — green on every PR.
-- [ ] `internal/adminboot` bootstraps login → party → enrollment token →
+- [x] `internal/adminboot` bootstraps login → party → enrollment token →
       capabilities against `gatewaytest`; package stays `internal/`.
-- [ ] `cmd/conformance` runs positive + negative cases; one mismatch
+- [x] `cmd/conformance` runs positive + negative cases; one mismatch
       exits non-zero naming the failing case (SDK-CONF-C01).
-- [ ] CI `e2e-gateway` job runs conformance against the throwaway
+- [x] CI `e2e-gateway` job runs conformance against the throwaway
       gateway; no CI or unit test reads `../gateway` (drift is the
       local-only `mise run qc --mirror-check`).
-- [ ] README recipes complete per SDK-README-001, including federation
+- [x] README recipes complete per SDK-README-001, including federation
       pepper (opened into memory only, never written to disk or env).
-- [ ] CONTRIBUTING, SECURITY, CHANGELOG, COMPATIBILITY.md present;
+- [x] CONTRIBUTING, SECURITY, CHANGELOG, COMPATIBILITY.md present;
       COMPATIBILITY table rows for gateway ↔ SDK ↔ conformance-runner.
-- [ ] DCO check enabled and passing before the first external PR.
-- [ ] `go test -race ./...` and `mise run qc` green; **v0.1.0 tagged**
+- [x] DCO check enabled and passing before the first external PR.
+- [x] `go test -race ./...` and `mise run qc` green; **v0.1.0 tagged**
       only with green CI + green conformance.
 
 ## Open items
