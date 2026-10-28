@@ -16,18 +16,26 @@
 #                 removed even on failure
 #   --conformance --start in development mode (APP_MODE=development,
 #                 APP_OUTBOUND_ALLOW_INSECURE=1, no APP_ADMIN_TOTP_SECRET,
-#                 raised APP_RATE_* limits, host.docker.internal wired to
-#                 the host gateway) + --health + go run ./cmd/conformance
-#                 + --stop; on failure the container logs are dumped to
-#                 stderr before the container is removed. The
-#                 ephemeral operator username/password reach the runner
-#                 through CONFORMANCE_* environment variables only —
+#                 raised APP_RATE_* limits, APP_LOG_LEVEL=info,
+#                 host.docker.internal wired to the host gateway) + --health
+#                 + go run ./cmd/conformance with the result-callback
+#                 receiver on the fixed host port E2E_CALLBACK_PORT
+#                 (bound on 0.0.0.0, reached from the container as
+#                 http://host.docker.internal:$E2E_CALLBACK_PORT — no
+#                 published port) + --stop; on failure the container logs
+#                 are dumped to stderr before the container is removed.
+#                 The ephemeral operator username/password reach the
+#                 runner through CONFORMANCE_* environment variables only —
 #                 never on the command line, never logged.
 #
 # Env:
 #   GATEWAY_IMAGE  image ref (default ghcr.io/konsulin-care/konsulin-gateway:latest;
 #                  a local build alias konsulin-gateway:<tag> is also accepted)
 #   E2E_PORT       host port published to the container (default 18080)
+#   E2E_CALLBACK_PORT  host port the conformance result-callback receiver
+#                  listens on, reached from the container as
+#                  http://host.docker.internal:$E2E_CALLBACK_PORT
+#                  (default 18081)
 #
 # Requires: docker, openssl, htpasswd (apache2-utils), curl; --conformance
 # additionally requires go (it runs `go run ./cmd/conformance`). The private
@@ -41,6 +49,7 @@ cd "$REPO_ROOT"
 
 GATEWAY_IMAGE="${GATEWAY_IMAGE:-ghcr.io/konsulin-care/konsulin-gateway:latest}"
 E2E_PORT="${E2E_PORT:-18080}"
+E2E_CALLBACK_PORT="${E2E_CALLBACK_PORT:-18081}"
 CONTAINER_NAME="gateway-sdk-e2e"
 HEALTH_URL="http://127.0.0.1:${E2E_PORT}/health"
 START_TIMEOUT_SECS="${START_TIMEOUT_SECS:-90}"
@@ -135,7 +144,11 @@ start() {
   # and nothing else changes. The ${arr[@]+...} guards keep empty arrays
   # safe under set -u.
   local -a profile_args=() totp_args=()
+  local log_level="error"
   if [ "$profile" = "conformance" ]; then
+    # info, not error: a failed run dumps these logs, and gateway-side
+    # context is the point of the dump.
+    log_level="info"
     profile_args=(
       --add-host=host.docker.internal:host-gateway
       -e APP_MODE=development
@@ -158,7 +171,7 @@ start() {
     -e APP_PORT=8080 \
     -e APP_DB_PATH=/app/data/gateway.db \
     -e APP_BACKUP_PATH=/app/data/backup \
-    -e APP_LOG_LEVEL=error \
+    -e "APP_LOG_LEVEL=${log_level}" \
     -e "APP_XENDIT_TOKEN=${xendit_token}" \
     -e "APP_XENDIT_CALLBACK_TOKEN=${xendit_callback_token}" \
     -e "APP_GATEWAY_SIGNING_KEY=${gateway_key}" \
@@ -238,10 +251,16 @@ conformance_cleanup() {
 run_conformance() {
   command -v go >/dev/null 2>&1 || die "go not found"
   [ -n "${OPERATOR_PASSWORD:-}" ] || die "no operator password in scope; --start conformance must run first"
-  log "running cmd/conformance against http://127.0.0.1:${E2E_PORT}"
+  log "running cmd/conformance against http://127.0.0.1:${E2E_PORT} (callback port ${E2E_CALLBACK_PORT})"
+  # The runner's result-callback receiver binds the fixed host port
+  # E2E_CALLBACK_PORT on every interface; the container reaches it as
+  # http://host.docker.internal:$E2E_CALLBACK_PORT through the
+  # host.docker.internal:host-gateway mapping, so no port is published.
   CONFORMANCE_BASE_URL="http://127.0.0.1:${E2E_PORT}" \
     CONFORMANCE_OPERATOR_USER="${OPERATOR_USER}" \
     CONFORMANCE_OPERATOR_PASSWORD="${OPERATOR_PASSWORD}" \
+    CONFORMANCE_CALLBACK_ADDR="0.0.0.0:${E2E_CALLBACK_PORT}" \
+    CONFORMANCE_CALLBACK_URL="http://host.docker.internal:${E2E_CALLBACK_PORT}" \
     go run ./cmd/conformance
 }
 
