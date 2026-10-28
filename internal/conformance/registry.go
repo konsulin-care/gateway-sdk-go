@@ -72,6 +72,10 @@ type Env struct {
 	// ListingID is the free listing the listings case creates and the
 	// payment-paid case purchases. Empty until the listings step runs.
 	ListingID string
+	// ListingService is the created listing's service name — the
+	// marketplace title the webhooks step enqueues against. Empty
+	// until the listings step runs.
+	ListingService string
 	// Callback is the plain-HTTP result receiver; the result-callback
 	// case passes only after at least one inbound delivery is recorded.
 	Callback *CallbackReceiver
@@ -89,6 +93,11 @@ func (e *Env) client() *http.Client {
 // case registers when Env.PartyHealthURL is unset: the container-
 // internal throwaway conformance gateway's loopback health route.
 const defaultPartyHealthURL = "http://127.0.0.1:8080/health"
+
+// conformanceListingName is the QC-chain free listing's marketplace
+// title; the gateway resolves a webhook's service field against
+// listing names, so it doubles as the chain listing's service name.
+const conformanceListingName = "conformance-free-listing"
 
 // partyHealthURL returns the configured party health URL, selecting
 // the container-internal default when the env leaves it unset.

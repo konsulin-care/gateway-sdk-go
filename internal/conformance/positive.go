@@ -214,15 +214,16 @@ func runApprovals(ctx context.Context, env *Env) error {
 	return nil
 }
 
-// runListings creates the free listing the payment step purchases,
-// lists the marketplace, and threads the listing id into env.
+// runListings creates the free webhook listing the payment step
+// purchases and the webhooks step invokes, lists the marketplace,
+// and threads the listing id and service name into env.
 func runListings(ctx context.Context, env *Env) error {
 	lc, err := listingsClient(env, "listings")
 	if err != nil {
 		return err
 	}
 	created, err := lc.Create(ctx, wire.CreateListingRequest{
-		Name: "conformance-free-listing", EndpointURL: env.BaseURL, Price: 0, Invocation: "commodity",
+		Name: conformanceListingName, EndpointURL: env.callbackURL(), Price: 0, Invocation: "webhook",
 	})
 	if err != nil {
 		return named("listings: create", err)
@@ -237,6 +238,7 @@ func runListings(ctx context.Context, env *Env) error {
 	for _, row := range rows.Listings {
 		if row.ListingID == created.ListingID {
 			env.ListingID = created.ListingID
+			env.ListingService = conformanceListingName
 			return nil
 		}
 	}

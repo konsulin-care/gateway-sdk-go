@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/konsulin-care/gateway-sdk-go/gatewaytest"
+	"github.com/konsulin-care/gateway-sdk-go/wire"
 )
 
 // adminbootImport is the import path the bootstrap case must use for
@@ -333,4 +334,71 @@ func TestRunIdentitiesResolveSendsPhoneHashMarker(t *testing.T) {
 		"the resolve probe must carry the phone_hash N/A marker")
 	assert.Equal(t, identityHash("conformance-identity@example.test"), resolveBody.EmailHash,
 		"the resolve probe must carry the same email hash it registered")
+}
+
+// listingCreateBody decodes the body of the last recorded POST
+// /v1/listings request, failing the test when none was recorded.
+func listingCreateBody(t *testing.T, g *gatewaytest.Gateway) wire.CreateListingRequest {
+	t.Helper()
+	recorded := g.Recorded()
+	for i := len(recorded) - 1; i >= 0; i-- {
+		rec := recorded[i]
+		if rec.Method != http.MethodPost || rec.Path != "/v1/listings" {
+			continue
+		}
+		var body wire.CreateListingRequest
+		require.NoError(t, json.Unmarshal(rec.Body, &body), "decode the create-listing body")
+		return body
+	}
+	require.FailNow(t, "listings recorded no POST /v1/listings request")
+	return wire.CreateListingRequest{}
+}
+
+// TestRunListingsCreatesWebhookListingAtCallbackURL asserts the
+// listings case creates the chain listing with invocation "webhook"
+// (the only mode /v1/webhooks resolution accepts) and endpoint_url
+// pointing at the runner's callback listener — Env.CallbackURL when
+// set, the receiver's loopback URL when empty — and threads the
+// created listing id and its service name into Env.
+func TestRunListingsCreatesWebhookListingAtCallbackURL(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	t.Run("env callback url", func(t *testing.T) {
+		g := gatewaytest.NewGateway()
+		t.Cleanup(g.Close)
+		receiver := NewCallbackReceiver()
+		t.Cleanup(receiver.Close)
+		_, priv, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		env := &Env{BaseURL: g.URL(), PartyID: "01HZYCONFORMANCEPARTY", Callback: receiver, Priv: priv}
+		env.CallbackURL = "https://runner.example.test/callbacks/result"
+
+		require.NoError(t, runListings(ctx, env),
+			"runListings must pass when the marketplace read returns the created listing")
+		body := listingCreateBody(t, g)
+		assert.Equal(t, "webhook", body.Invocation,
+			"the create request must carry invocation webhook")
+		assert.Equal(t, "https://runner.example.test/callbacks/result", body.EndpointURL,
+			"endpoint_url must carry Env.CallbackURL")
+		require.NotEmpty(t, env.ListingID, "runListings must thread the created listing id")
+		assert.Equal(t, body.Name, env.ListingService,
+			"runListings must thread the created listing's service name")
+	})
+
+	t.Run("receiver fallback", func(t *testing.T) {
+		g := gatewaytest.NewGateway()
+		t.Cleanup(g.Close)
+		receiver := NewCallbackReceiver()
+		t.Cleanup(receiver.Close)
+		_, priv, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		env := &Env{BaseURL: g.URL(), PartyID: "01HZYCONFORMANCEPARTY", Callback: receiver, Priv: priv}
+
+		require.NoError(t, runListings(ctx, env),
+			"runListings must pass when the marketplace read returns the created listing")
+		body := listingCreateBody(t, g)
+		assert.Equal(t, receiver.URL(), body.EndpointURL,
+			"endpoint_url must fall back to the receiver loopback URL")
+	})
 }
