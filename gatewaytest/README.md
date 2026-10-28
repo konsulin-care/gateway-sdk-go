@@ -33,8 +33,9 @@ packages (including `internal/*` where a fake must mint real tokens).
   `RecordedRequest` (verb, path, auth, idempotency key, party jti)
 - `handlers_admin.go` — `AdminOptions`, `EnableAdmin` opt-in canned
   admin handlers (login username/password-only, create party, issue
-  enrollment token, grant capability, revoke party; Bruno shapes,
-  admin Bearer 401s; admin paths stay 404 unless enabled)
+  enrollment token, grant and revoke capability, revoke party, set
+  party tier; Bruno shapes, admin Bearer 401s; admin paths stay 404
+  unless enabled)
 - `handlers_routes.go` — one canned handler per §9.6 route row
 - `handlers_idempotency.go` — per-key idempotency store: reserve,
   replay a stored 2xx, release on non-2xx

@@ -1,8 +1,16 @@
 // Package conformance holds the shared conformance cases executed by
-// cmd/conformance against a live gateway: positive flows over the QC-chain
-// party surface plus the negative cases (wrong key, replay, wrong typ,
-// body_sha256 mismatch, expiry, unknown kid, revoked party, capability
-// denial, idempotency replay).
+// cmd/conformance against a live gateway. The positive QC chain runs
+// health, admin bootstrap (login, create party, issue the enrollment
+// token — no capability grants), then enrollment, which registers the
+// party key and promotes the party to the konsulin tier over a fresh
+// admin login; rotation, JWKS, identities, approvals, listings,
+// payment, webhooks, and the result callback follow.
+//
+// The negative cases follow in destructive-last order: wrong key,
+// replay, wrong typ, body_sha256 mismatch, expiry, unknown kid,
+// idempotency replay, then the two admin-revoke observations —
+// capability denial after the webhook:invoke revoke, and revoked
+// party last, whose party revoke ends the run.
 //
 // This file also carries the helpers every case shares: the SDK and
 // domain client builders, thumbprint, and identity-hash helpers the

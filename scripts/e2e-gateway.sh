@@ -18,7 +18,8 @@
 #                 APP_OUTBOUND_ALLOW_INSECURE=1, no APP_ADMIN_TOTP_SECRET,
 #                 raised APP_RATE_* limits, host.docker.internal wired to
 #                 the host gateway) + --health + go run ./cmd/conformance
-#                 + --stop; the container is removed even on failure. The
+#                 + --stop; on failure the container logs are dumped to
+#                 stderr before the container is removed. The
 #                 ephemeral operator username/password reach the runner
 #                 through CONFORMANCE_* environment variables only —
 #                 never on the command line, never logged.
@@ -206,12 +207,34 @@ stop() {
   fi
 }
 
+# dump_logs prints the throwaway container's logs (tail-bounded) to
+# stderr so a failed run leaves the gateway side of the failure in the
+# harness output before cleanup removes the container.
+dump_logs() {
+  if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+    log "container $CONTAINER_NAME logs (last 200 lines):"
+    docker logs "$CONTAINER_NAME" 2>&1 | tail -200 >&2 || true
+  fi
+}
+
+# conformance_cleanup is the --conformance EXIT trap: on a non-zero
+# exit (start, health, or the conformance runner) it dumps the
+# container logs first, then removes the container — the logs die with
+# the container, so they must be dumped before cleanup.
+conformance_cleanup() {
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    dump_logs
+  fi
+  stop
+}
+
 # run_conformance runs the SDK conformance suite against the running
 # throwaway gateway. The ephemeral operator username/password and the
 # base URL reach the runner through the CONFORMANCE_* environment only —
 # never on the command line, never logged. A non-zero runner exit (1
 # mismatch, 2 usage) propagates as this script's exit status; the EXIT
-# trap still removes the container.
+# trap dumps the container logs on failure, then removes the container.
 run_conformance() {
   command -v go >/dev/null 2>&1 || die "go not found"
   [ -n "${OPERATOR_PASSWORD:-}" ] || die "no operator password in scope; --start conformance must run first"
@@ -239,7 +262,7 @@ case "$MODE" in
     health
     ;;
   --conformance)
-    trap stop EXIT
+    trap conformance_cleanup EXIT
     start conformance
     health
     run_conformance

@@ -1,12 +1,16 @@
 # internal/conformance
 
 **Purpose**: the shared conformance cases executed by `cmd/conformance` against
-a live gateway — positive flows over the QC-chain party surface (enrollment,
-rotation, JWKS, identities, approvals, listings, payments, webhooks, result
-callback) plus the negative cases: wrong signing key, replayed enrollment
+a live gateway. The positive QC chain runs gateway health, admin bootstrap
+(login, create party, issue the enrollment token — no capability grants),
+enrollment (registers the party key and promotes the party to the konsulin
+tier over a fresh admin login), then rotation, JWKS, identities, approvals,
+listings, payments, webhooks, and the result callback. The negative cases
+follow in destructive-last order: wrong signing key, replayed enrollment
 token, wrong/missing `typ`, `body_sha256` mismatch, expired token, unknown
-`kid` after one refetch, revoked party, missing capability
-(`capability_denied`), idempotency replay.
+`kid` after one refetch, idempotency replay, missing capability
+(`capability_denied`, after the `webhook:invoke` revoke), and revoked party
+last — the party revoke ends the run.
 
 **Allowed imports** (PRD §7 dependency rules): standard library and public SDK
 packages (plus `internal/adminboot` for setup).
