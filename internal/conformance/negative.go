@@ -206,8 +206,8 @@ func negativeUnknownKid(ctx context.Context, env *Env) error {
 	return nil
 }
 
-// negativeRevokedParty revokes the party over a fresh adminboot
-// login, then denies a valid party token: 403 GW-PARTY-002.
+// negativeRevokedParty revokes the party, then denies a valid party
+// token: 401 GW-ADMIN-004 — keys expire on revoke before any 403 check.
 func negativeRevokedParty(ctx context.Context, env *Env) error {
 	const name = "revoked-party"
 	if err := env.revokeParty(ctx, name); err != nil {
@@ -221,7 +221,7 @@ func negativeRevokedParty(ctx context.Context, env *Env) error {
 	if err != nil {
 		return named(name, err)
 	}
-	return named(name, expectDeny(status, body, http.StatusForbidden, "GW-PARTY-002"))
+	return named(name, expectDeny(status, body, http.StatusUnauthorized, "GW-ADMIN-004"))
 }
 
 // negativeCapabilityDenied revokes webhook:invoke over a fresh admin
@@ -260,14 +260,15 @@ func negativeIdempotencyReplay(ctx context.Context, env *Env) error {
 	if err != nil {
 		return named(name, err)
 	}
+	service := env.listingService()
 	first, err := json.Marshal(wire.SyncWebhookRequest{
-		To: env.PartyID, Service: "conformance", Payload: json.RawMessage(`{"n":1}`),
+		To: env.PartyID, Service: service, Payload: json.RawMessage(`{"n":1}`),
 	})
 	if err != nil {
 		return named(name, err)
 	}
 	conflict, err := json.Marshal(wire.SyncWebhookRequest{
-		To: env.PartyID, Service: "conformance", Payload: json.RawMessage(`{"n":2}`),
+		To: env.PartyID, Service: service, Payload: json.RawMessage(`{"n":2}`),
 	})
 	if err != nil {
 		return named(name, err)

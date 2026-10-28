@@ -128,6 +128,18 @@ func (e *Env) callbackURL() string {
 	return ""
 }
 
+// listingService returns the env listing's service name for webhook
+// probes, defaulting to the QC-chain listing name when the env leaves
+// it unset.
+//
+// Returns: the sync/enqueue service field.
+func (e *Env) listingService() string {
+	if e != nil && e.ListingService != "" {
+		return e.ListingService
+	}
+	return conformanceListingName
+}
+
 // revokeWebhookInvoke revokes the env party's webhook:invoke grant at
 // DELETE /v1/admin/parties/{id}/capabilities/webhook:invoke after a
 // fresh adminboot login, so the capability-denied probe arrives

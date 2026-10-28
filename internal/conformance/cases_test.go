@@ -94,7 +94,9 @@ func scriptDeny(t *testing.T, g *gatewaytest.Gateway, name string) {
 			denyStep(t, http.StatusUnauthorized, "GW-ADMIN-004"),
 			denyStep(t, http.StatusUnauthorized, "GW-ADMIN-004"))
 	case "revoked-party":
-		g.Script(http.MethodGet, partyHealthPath, denyStep(t, http.StatusForbidden, "GW-PARTY-002"))
+		// The gateway expires every party key on revoke, so verification
+		// denies 401 GW-ADMIN-004 before any 403 state check runs.
+		g.Script(http.MethodGet, partyHealthPath, denyStep(t, http.StatusUnauthorized, "GW-ADMIN-004"))
 	case "capability-denied":
 		g.Script(http.MethodPost, webhooksPath, denyStep(t, http.StatusForbidden, wire.CodeCapabilityDenied))
 	case "idempotency-replay":
@@ -106,16 +108,23 @@ func scriptDeny(t *testing.T, g *gatewaytest.Gateway, name string) {
 	}
 }
 
-// scriptAccept makes the fake wrongly accept every send of a negative
+// scriptAccept makes the fake wrongly answer every send of a negative
 // case. All cases pass on the canned 2xx examples except
 // idempotency-replay, whose canned store would still deny the body
-// conflict — three scripted 200s make the target accept it too.
-func scriptAccept(g *gatewaytest.Gateway, name string) {
-	if name == "idempotency-replay" {
+// conflict — three scripted 200s make the target accept it too — and
+// revoked-party, whose wrong answer is the 403 state deny the case
+// must reject in favor of the 401 key-expiry denial.
+func scriptAccept(t *testing.T, g *gatewaytest.Gateway, name string) {
+	t.Helper()
+	switch name {
+	case "idempotency-replay":
 		g.Script(http.MethodPost, webhooksSyncPath,
 			gatewaytest.ScriptStep{Status: http.StatusOK},
 			gatewaytest.ScriptStep{Status: http.StatusOK},
 			gatewaytest.ScriptStep{Status: http.StatusOK})
+	case "revoked-party":
+		g.Script(http.MethodGet, partyHealthPath,
+			denyStep(t, http.StatusForbidden, "GW-PARTY-002"))
 	}
 }
 
@@ -159,11 +168,61 @@ func TestConformanceNegativeCasesAllNamed(t *testing.T) {
 			t.Run("fails when the target accepts", func(t *testing.T) {
 				g := gatewaytest.NewGateway()
 				t.Cleanup(g.Close)
-				scriptAccept(g, c.Name)
+				scriptAccept(t, g, c.Name)
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				require.Error(t, c.Run(ctx, negativeEnv(g)))
 			})
+		})
+	}
+}
+
+// TestIdempotencyReplaySyncService asserts the idempotency-replay
+// case sends Env.ListingService as the sync request's service field,
+// defaulting to the chain listing name when the env leaves it empty,
+// and that its three probes reuse one idempotency key with the first
+// two bodies byte-identical (the replay) and the third conflicting.
+func TestIdempotencyReplaySyncService(t *testing.T) {
+	tests := []struct {
+		name           string
+		listingService string
+		want           string
+	}{
+		{name: "env listing service", listingService: "custom-listing-svc", want: "custom-listing-svc"},
+		{name: "defaults to the chain listing name", listingService: "", want: conformanceListingName},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := gatewaytest.NewGateway()
+			t.Cleanup(g.Close)
+			env := negativeEnv(g)
+			env.ListingService = tc.listingService
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			require.NoError(t, negativeIdempotencyReplay(ctx, env),
+				"replay must pass against the fake's byte-identical replay store")
+
+			var syncs []gatewaytest.RecordedRequest
+			for _, rec := range g.Recorded() {
+				if rec.Method == http.MethodPost && rec.Path == webhooksSyncPath {
+					syncs = append(syncs, rec)
+				}
+			}
+			require.Len(t, syncs, 3, "replay must send first, replay, and conflict probes")
+			require.NotEmpty(t, syncs[0].IdempotencyKey, "probes must carry an idempotency key")
+			for i, rec := range syncs {
+				assert.Equal(t, syncs[0].IdempotencyKey, rec.IdempotencyKey,
+					"sync probe %d must reuse the first idempotency key", i)
+			}
+			require.Equal(t, syncs[0].Body, syncs[1].Body,
+				"the replay probe must resend a byte-identical body")
+			require.NotEqual(t, syncs[0].Body, syncs[2].Body,
+				"the conflict probe must carry a different body")
+			for i, rec := range syncs {
+				var req wire.SyncWebhookRequest
+				require.NoError(t, json.Unmarshal(rec.Body, &req), "decode sync probe %d body", i)
+				assert.Equal(t, tc.want, req.Service, "sync probe %d service", i)
+			}
 		})
 	}
 }
