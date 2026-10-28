@@ -23,7 +23,14 @@ stdout, prints failing case names to stderr, and returns the exit code
 (`ExitOK`/`ExitMismatch`/`ExitUsage` — usage errors are detected before any
 request). `Version` reports the runner version from the Go build info
 (SDK-CONF-003). The operator password comes from `Config.OperatorPass`
-(environment only, no flag) and is never printed.
+(environment only, no flag) and is never printed. The runner threads
+`Config.CallbackURL` and `Config.PartyHealthURL` into the case `Env` (the
+bootstrap registers them as `endpoints.callbacks` and `endpoints.health`); an
+unset `Config.CallbackURL` falls back to the result-callback receiver's own
+loopback URL. The receiver binds `Config.CallbackAddr` (empty selects an
+ephemeral loopback listener) — in fixed-port CI wiring the receiver takes a
+fixed loopback port via `CallbackAddr` while the externally reachable URL is
+the runner host's `host.docker.internal` form of that port.
 
 **Files**:
 - `registry.go` — ordered case registry (Kind, Case, Env, `Registry()`)

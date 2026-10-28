@@ -6,9 +6,11 @@ import (
 )
 
 // Config is the conformance runner configuration: the target gateway,
-// the operator bootstrap credentials, and the result-callback receiver
-// bind address. The operator password is a secret — it is read from
-// the environment only and never printed (PRD §8).
+// the operator bootstrap credentials, the result-callback receiver
+// bind address, and the externally reachable callback and party
+// health URLs the bootstrap case registers. The operator password is
+// a secret — it is read from the environment only and never printed
+// (PRD §8).
 type Config struct {
 	// BaseURL is the live gateway base URL (scheme://host[:port]).
 	BaseURL string
@@ -22,6 +24,15 @@ type Config struct {
 	// CallbackAddr is the host:port the plain-HTTP result-callback
 	// receiver binds; empty selects an ephemeral loopback listener.
 	CallbackAddr string
+	// CallbackURL is the runner's externally reachable result-callback
+	// URL the bootstrap case registers as endpoints.callbacks; empty
+	// falls back to the receiver's loopback URL.
+	CallbackURL string
+	// PartyHealthURL is the QC-chain party's health URL the bootstrap
+	// case registers as endpoints.health; empty selects the
+	// container-internal default for the throwaway conformance
+	// gateway.
+	PartyHealthURL string
 	// Timeout bounds each case individually; zero selects the
 	// package default (defaultCaseTimeout).
 	Timeout time.Duration

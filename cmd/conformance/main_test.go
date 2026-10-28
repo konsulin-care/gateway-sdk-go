@@ -109,3 +109,29 @@ func TestRunRejectsUnknownFlag(t *testing.T) {
 	require.NotEqual(t, 0, code, "an unknown flag must exit non-zero")
 	assert.Contains(t, stderr.String(), "no-such-flag")
 }
+
+// TestConfigReadsCallbackURLFromEnvAndFlagOverrides asserts the command
+// reads CONFORMANCE_CALLBACK_URL into the runner config and that the
+// -callback-url flag value overrides the environment value.
+func TestConfigReadsCallbackURLFromEnvAndFlagOverrides(t *testing.T) {
+	const (
+		envURL  = "https://env.example.test/callbacks/result"
+		flagURL = "https://flag.example.test/callbacks/result"
+	)
+	lookup := func(name string) (string, bool) {
+		if name == "CONFORMANCE_CALLBACK_URL" {
+			return envURL, true
+		}
+		return "", false
+	}
+
+	cfg := configFrom(lookup, "", "", "", "")
+	require.NotNil(t, cfg, "the config must resolve")
+	assert.Equal(t, envURL, cfg.CallbackURL,
+		"the config must read CONFORMANCE_CALLBACK_URL from the environment")
+
+	cfg = configFrom(lookup, "", "", "", flagURL)
+	require.NotNil(t, cfg, "the config must resolve")
+	assert.Equal(t, flagURL, cfg.CallbackURL,
+		"the -callback-url flag must override CONFORMANCE_CALLBACK_URL")
+}

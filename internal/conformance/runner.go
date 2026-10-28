@@ -37,6 +37,21 @@ const defaultCaseTimeout = 90 * time.Second
 // operator configuration; stdout and stderr receive the report.
 // Returns: the process exit code (ExitOK, ExitMismatch, ExitUsage).
 func Run(ctx context.Context, cfg *Config, stdout, stderr io.Writer) int {
+	return runRegistry(ctx, cfg, Registry(), stdout, stderr)
+}
+
+// runRegistry executes cases against cfg: it validates the
+// configuration before any request is issued, starts the
+// result-callback receiver, threads the configured callback URL and
+// party health URL into the case Env (an unset callback URL falls
+// back to the receiver's loopback URL via Env.callbackURL()), and
+// reports the per-case results.
+//
+// Parameters: ctx bounds the run; cfg carries the target and operator
+// configuration; cases is the registry slice to execute; stdout and
+// stderr receive the report.
+// Returns: the process exit code (ExitOK, ExitMismatch, ExitUsage).
+func runRegistry(ctx context.Context, cfg *Config, cases []Case, stdout, stderr io.Writer) int {
 	if err := cfg.Validate(); err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return ExitUsage
@@ -48,12 +63,14 @@ func Run(ctx context.Context, cfg *Config, stdout, stderr io.Writer) int {
 	}
 	defer callback.Close()
 	env := &Env{
-		BaseURL:   cfg.BaseURL,
-		AdminUser: cfg.OperatorUser,
-		AdminPass: cfg.OperatorPass,
-		Callback:  callback,
+		BaseURL:        cfg.BaseURL,
+		AdminUser:      cfg.OperatorUser,
+		AdminPass:      cfg.OperatorPass,
+		Callback:       callback,
+		CallbackURL:    cfg.CallbackURL,
+		PartyHealthURL: cfg.PartyHealthURL,
 	}
-	return runCases(ctx, Registry(), env, cfg.timeout(), stdout, stderr)
+	return runCases(ctx, cases, env, cfg.timeout(), stdout, stderr)
 }
 
 // runCases executes cases in order against env, prints one result
