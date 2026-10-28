@@ -31,8 +31,10 @@ func runHealth(ctx context.Context, env *Env) error {
 }
 
 // runBootstrap performs the admin bootstrap over internal/adminboot —
-// login, create party, issue the single-use enrollment token, grant
-// the QC-chain capabilities — and threads party id and token into env.
+// login, create party, issue the single-use enrollment token — and
+// threads party id and token into env. Bootstrap issues the token
+// only: it grants no capabilities, because the chain party earns its
+// konsulin tier at enrollment.
 func runBootstrap(ctx context.Context, env *Env) error {
 	ab := adminboot.New(env.BaseURL, env.client())
 	bearer, err := ab.Login(ctx, env.AdminUser, env.AdminPass)
@@ -51,22 +53,15 @@ func runBootstrap(ctx context.Context, env *Env) error {
 	if err != nil {
 		return named("bootstrap: issue enrollment token", err)
 	}
-	caps := []string{
-		wire.CapabilityIdentityRegister, wire.CapabilityIdentityResolve,
-		wire.CapabilityIdentityLink, wire.CapabilityApprovalReferral,
-		wire.CapabilityAcceptReferral, wire.CapabilityListingEnlist,
-		wire.CapabilityPaymentCreate, wire.CapabilityWebhookInvoke,
-	}
-	if err := ab.GrantCapabilities(ctx, bearer, partyID, caps...); err != nil {
-		return named("bootstrap: grant capabilities", err)
-	}
 	env.PartyID = partyID
 	env.EnrollmentToken = token
 	return nil
 }
 
 // runEnrollment registers a fresh Ed25519 key with the bootstrap
-// enrollment token and threads it into env.Priv as the chain signer.
+// enrollment token, threads it into env.Priv as the chain signer, and
+// promotes the enrolled party to the konsulin tier over a fresh
+// adminboot login — the promotion follows a successful enroll.
 func runEnrollment(ctx context.Context, env *Env) error {
 	if env.PartyID == "" || env.EnrollmentToken == "" {
 		return errors.New("conformance: enrollment: run bootstrap first")
@@ -85,6 +80,18 @@ func runEnrollment(ctx context.Context, env *Env) error {
 	}
 	if out.PartyID != env.PartyID {
 		return fmt.Errorf("conformance: enrollment: enrolled party %q, want %q", out.PartyID, env.PartyID)
+	}
+	ab := adminboot.New(env.BaseURL, env.client())
+	bearer, err := ab.Login(ctx, env.AdminUser, env.AdminPass)
+	if err != nil {
+		return named("enrollment: admin login", err)
+	}
+	tier, err := ab.SetTier(ctx, bearer, env.PartyID, "konsulin")
+	if err != nil {
+		return named("enrollment: set tier", err)
+	}
+	if tier != "konsulin" {
+		return fmt.Errorf("conformance: enrollment: applied tier %q, want %q", tier, "konsulin")
 	}
 	env.Priv = priv
 	return nil
