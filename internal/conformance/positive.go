@@ -31,7 +31,8 @@ func runHealth(ctx context.Context, env *Env) error {
 }
 
 // runBootstrap performs the admin bootstrap over internal/adminboot —
-// login, create party, issue the single-use enrollment token — and
+// login, create party (carrying endpoints.health and
+// endpoints.callbacks), issue the single-use enrollment token — and
 // threads party id and token into env. Bootstrap issues the token
 // only: it grants no capabilities, because the chain party earns its
 // konsulin tier at enrollment.
@@ -41,10 +42,15 @@ func runBootstrap(ctx context.Context, env *Env) error {
 	if err != nil {
 		return named("bootstrap: login", err)
 	}
+	endpoints := map[string]string{"health": env.partyHealthURL()}
+	if callbacks := env.callbackURL(); callbacks != "" {
+		endpoints["callbacks"] = callbacks
+	}
 	partyID, err := ab.CreateParty(ctx, bearer, adminboot.CreatePartyRequest{
 		OrgName:       "QC Chain Conformance Party",
 		OrgIdentifier: "qc-chain-conformance",
 		Tier:          "authorized",
+		Endpoints:     endpoints,
 	})
 	if err != nil {
 		return named("bootstrap: create party", err)

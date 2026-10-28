@@ -196,3 +196,99 @@ func TestRunBootstrapHasNoCapabilityPreGrant(t *testing.T) {
 	assert.Greater(t, enrollmentCalls["SetTier"][0], enrollmentCalls["Enroll"][0],
 		"the tier promotion must come after a successful enroll")
 }
+
+// adminGateway starts a fake gateway with the admin fakes enabled
+// under the bootstrap test operator credentials.
+func adminGateway(t *testing.T) *gatewaytest.Gateway {
+	t.Helper()
+	g := gatewaytest.NewGateway()
+	t.Cleanup(g.Close)
+	g.EnableAdmin(gatewaytest.AdminOptions{Username: "operator", Password: bootstrapTestPass})
+	return g
+}
+
+// createPartyEndpoints decodes the endpoints object from the last
+// recorded POST /v1/admin/parties request body and fails the test
+// when bootstrap recorded no create-party request or the body
+// carried no endpoints object.
+func createPartyEndpoints(t *testing.T, g *gatewaytest.Gateway) map[string]string {
+	t.Helper()
+	recorded := g.Recorded()
+	for i := len(recorded) - 1; i >= 0; i-- {
+		rec := recorded[i]
+		if rec.Method != http.MethodPost || rec.Path != "/v1/admin/parties" {
+			continue
+		}
+		var body struct {
+			Endpoints map[string]string `json:"endpoints"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body, &body), "decode the create-party body")
+		require.NotNil(t, body.Endpoints, "the create-party body must carry an endpoints object")
+		return body.Endpoints
+	}
+	require.FailNow(t, "bootstrap recorded no POST /v1/admin/parties request")
+	return nil
+}
+
+// TestRunBootstrapRegistersPartyHealthEndpoint asserts the bootstrap
+// create-party request carries endpoints.health equal to the
+// configured party health URL, and defaults to the container-internal
+// throwaway gateway's health route when the env leaves it unset.
+func TestRunBootstrapRegistersPartyHealthEndpoint(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	t.Run("configured", func(t *testing.T) {
+		g := adminGateway(t)
+		env := &Env{BaseURL: g.URL(), AdminUser: "operator", AdminPass: bootstrapTestPass}
+		env.PartyHealthURL = "http://party.example.test:9090/health"
+		require.NoError(t, runBootstrap(ctx, env))
+		assert.Equal(t, "http://party.example.test:9090/health",
+			createPartyEndpoints(t, g)["health"],
+			"endpoints.health must carry the configured party health URL")
+	})
+
+	t.Run("default", func(t *testing.T) {
+		g := adminGateway(t)
+		env := &Env{BaseURL: g.URL(), AdminUser: "operator", AdminPass: bootstrapTestPass}
+		require.NoError(t, runBootstrap(ctx, env))
+		assert.Equal(t, "http://127.0.0.1:8080/health",
+			createPartyEndpoints(t, g)["health"],
+			"endpoints.health must default to the container-internal throwaway gateway")
+	})
+}
+
+// TestRunBootstrapRegistersCallbacksEndpoint asserts the bootstrap
+// create-party request carries endpoints.callbacks equal to
+// Env.CallbackURL — the runner's externally reachable callback URL —
+// when set, and falls back to the receiver's loopback URL when it is
+// empty.
+func TestRunBootstrapRegistersCallbacksEndpoint(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	t.Run("env callback url", func(t *testing.T) {
+		g := adminGateway(t)
+		receiver := NewCallbackReceiver()
+		t.Cleanup(receiver.Close)
+		env := &Env{BaseURL: g.URL(), AdminUser: "operator", AdminPass: bootstrapTestPass}
+		env.Callback = receiver
+		env.CallbackURL = "https://runner.example.test/callbacks/result"
+		require.NoError(t, runBootstrap(ctx, env))
+		assert.Equal(t, "https://runner.example.test/callbacks/result",
+			createPartyEndpoints(t, g)["callbacks"],
+			"endpoints.callbacks must carry Env.CallbackURL when set")
+	})
+
+	t.Run("receiver fallback", func(t *testing.T) {
+		g := adminGateway(t)
+		receiver := NewCallbackReceiver()
+		t.Cleanup(receiver.Close)
+		env := &Env{BaseURL: g.URL(), AdminUser: "operator", AdminPass: bootstrapTestPass}
+		env.Callback = receiver
+		require.NoError(t, runBootstrap(ctx, env))
+		assert.Equal(t, receiver.URL(),
+			createPartyEndpoints(t, g)["callbacks"],
+			"endpoints.callbacks must fall back to the receiver loopback URL")
+	})
+}

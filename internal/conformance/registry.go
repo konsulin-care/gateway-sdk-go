@@ -42,6 +42,15 @@ type Case struct {
 type Env struct {
 	// BaseURL is the live gateway base URL (scheme://host[:port]).
 	BaseURL string
+	// PartyHealthURL is the QC-chain party's health URL the bootstrap
+	// case registers as endpoints.health on the create-party request;
+	// empty selects the container-internal default for the throwaway
+	// conformance gateway.
+	PartyHealthURL string
+	// CallbackURL is the runner's externally reachable result-callback
+	// URL the bootstrap case registers as endpoints.callbacks; empty
+	// falls back to the receiver's loopback URL.
+	CallbackURL string
 	// HTTP is the client every request is issued through (nil selects
 	// http.DefaultClient).
 	HTTP *http.Client
@@ -74,6 +83,40 @@ func (e *Env) client() *http.Client {
 		return e.HTTP
 	}
 	return http.DefaultClient
+}
+
+// defaultPartyHealthURL is the party health endpoint the bootstrap
+// case registers when Env.PartyHealthURL is unset: the container-
+// internal throwaway conformance gateway's loopback health route.
+const defaultPartyHealthURL = "http://127.0.0.1:8080/health"
+
+// partyHealthURL returns the configured party health URL, selecting
+// the container-internal default when the env leaves it unset.
+//
+// Returns: the endpoints.health URL for the create-party request.
+func (e *Env) partyHealthURL() string {
+	if e != nil && e.PartyHealthURL != "" {
+		return e.PartyHealthURL
+	}
+	return defaultPartyHealthURL
+}
+
+// callbackURL returns the runner's externally reachable callback URL
+// from the env, falling back to the receiver's loopback URL when
+// unset, and empty when neither is configured.
+//
+// Returns: the endpoints.callbacks URL for the create-party request.
+func (e *Env) callbackURL() string {
+	if e == nil {
+		return ""
+	}
+	if e.CallbackURL != "" {
+		return e.CallbackURL
+	}
+	if e.Callback != nil {
+		return e.Callback.URL()
+	}
+	return ""
 }
 
 // revokeWebhookInvoke revokes the env party's webhook:invoke grant at
