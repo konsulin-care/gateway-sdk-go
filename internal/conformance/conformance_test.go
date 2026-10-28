@@ -2,6 +2,8 @@ package conformance
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"go/ast"
 	"go/parser"
@@ -291,4 +293,44 @@ func TestRunBootstrapRegistersCallbacksEndpoint(t *testing.T) {
 			createPartyEndpoints(t, g)["callbacks"],
 			"endpoints.callbacks must fall back to the receiver loopback URL")
 	})
+}
+
+// TestRunIdentitiesResolveSendsPhoneHashMarker asserts the identities
+// case passes against a fake gateway answering 2xx for register,
+// resolve, and link, and that the recorded resolve request body carries
+// the "N/A" phone-hash marker alongside the registered email hash —
+// the gateway validates every hash field as either the "N/A" marker or
+// a base64 32-byte hash (SDK-API-001), so a resolve probe without the
+// marker is rejected.
+func TestRunIdentitiesResolveSendsPhoneHashMarker(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	g := gatewaytest.NewGateway()
+	t.Cleanup(g.Close)
+
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	env := &Env{BaseURL: g.URL(), PartyID: "01HZYCONFORMANCEPARTY", Priv: priv}
+
+	require.NoError(t, runIdentities(ctx, env),
+		"runIdentities must pass against a fake answering 2xx for register, resolve and link")
+
+	var resolveBody struct {
+		EmailHash string `json:"email_hash"`
+		PhoneHash string `json:"phone_hash"`
+	}
+	found := false
+	for _, rec := range g.Recorded() {
+		if rec.Method != http.MethodPost || rec.Path != "/v1/identities/resolve" {
+			continue
+		}
+		require.NoError(t, json.Unmarshal(rec.Body, &resolveBody), "decode the resolve body")
+		found = true
+	}
+	require.True(t, found, "runIdentities must probe POST /v1/identities/resolve")
+	assert.Equal(t, "N/A", resolveBody.PhoneHash,
+		"the resolve probe must carry the phone_hash N/A marker")
+	assert.Equal(t, identityHash("conformance-identity@example.test"), resolveBody.EmailHash,
+		"the resolve probe must carry the same email hash it registered")
 }

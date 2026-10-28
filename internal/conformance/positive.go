@@ -184,7 +184,7 @@ func runIdentities(ctx context.Context, env *Env) error {
 	if reg.GlobalKey == "" {
 		return errors.New("conformance: identities: register returned no global key")
 	}
-	if _, err := ic.Resolve(ctx, wire.ResolveIdentityRequest{EmailHash: hash}); err != nil {
+	if _, err := ic.Resolve(ctx, wire.ResolveIdentityRequest{EmailHash: hash, PhoneHash: "N/A"}); err != nil {
 		return named("identities: resolve", err)
 	}
 	link, err := ic.Link(ctx, wire.LinkIdentityRequest{GlobalKey: reg.GlobalKey, LocalResourceID: "conformance-patient-002"})
