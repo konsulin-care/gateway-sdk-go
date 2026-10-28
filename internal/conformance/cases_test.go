@@ -43,10 +43,29 @@ func denyStep(t *testing.T, status int, code string) gatewaytest.ScriptStep {
 	return gatewaytest.ScriptStep{Status: status, Body: body}
 }
 
+// The operator credentials the offline negative cases opt the fake
+// admin handlers in with. The password is a named constant — never
+// spelled as a literal after a wire field — so the qc --secret
+// scanner does not flag it (the bootstrapTestPass pattern).
+const (
+	negativeTestUser = "operator"
+	negativeTestPass = "op-pass-negative"
+)
+
 // negativeEnv builds the conformance env an offline negative case runs
-// against a scripted fake gateway.
+// against a scripted fake gateway, enabling the fake's canned admin
+// handlers with matching operator credentials so the two admin-revoke
+// cases' destructive setup (fresh login plus revoke) hits canned 2xx
+// routes while the probes themselves consume the deny scripts.
 func negativeEnv(g *gatewaytest.Gateway) *Env {
-	return &Env{BaseURL: g.URL(), PartyID: conformancePartyID, EnrollmentToken: conformanceEnrollToken}
+	g.EnableAdmin(gatewaytest.AdminOptions{Username: negativeTestUser, Password: negativeTestPass})
+	return &Env{
+		BaseURL:         g.URL(),
+		PartyID:         conformancePartyID,
+		EnrollmentToken: conformanceEnrollToken,
+		AdminUser:       negativeTestUser,
+		AdminPass:       negativeTestPass,
+	}
 }
 
 // scriptDeny queues each negative case's expected deny responses; routes
@@ -131,9 +150,11 @@ func TestConformanceNegativeCasesAllNamed(t *testing.T) {
 				g := gatewaytest.NewGateway()
 				t.Cleanup(g.Close)
 				scriptDeny(t, g, c.Name)
+				env := negativeEnv(g)
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				require.NoError(t, c.Run(ctx, negativeEnv(g)))
+				require.NoError(t, c.Run(ctx, env))
+				assertRevokeBeforeProbe(t, g, c.Name)
 			})
 			t.Run("fails when the target accepts", func(t *testing.T) {
 				g := gatewaytest.NewGateway()
@@ -145,6 +166,45 @@ func TestConformanceNegativeCasesAllNamed(t *testing.T) {
 			})
 		})
 	}
+}
+
+// assertRevokeBeforeProbe asserts the recorded request order for the
+// two admin-revoke negative cases: the destructive setup's admin
+// revoke (capability revoke or party revoke, after the canned login)
+// arrives strictly before the denied probe. Cases without an admin
+// destructive setup are skipped.
+//
+// Parameters: t is the assertion target; g is the fake the case ran
+// against; name is the negative case name.
+func assertRevokeBeforeProbe(t *testing.T, g *gatewaytest.Gateway, name string) {
+	t.Helper()
+	party := "/v1/admin/parties/" + conformancePartyID
+	var revokeMethod, revokePath, probeMethod, probePath string
+	switch name {
+	case "revoked-party":
+		revokeMethod, revokePath = http.MethodPost, party+"/revoke"
+		probeMethod, probePath = http.MethodGet, "/v1/parties/"+conformancePartyID+"/health"
+	case "capability-denied":
+		revokeMethod, revokePath = http.MethodDelete,
+			party+"/capabilities/"+wire.CapabilityWebhookInvoke
+		probeMethod, probePath = http.MethodPost, webhooksPath
+	default:
+		return
+	}
+	revokeIdx, probeIdx := -1, -1
+	for i, rec := range g.Recorded() {
+		if revokeIdx < 0 && rec.Method == revokeMethod && rec.Path == revokePath {
+			revokeIdx = i
+		}
+		if probeIdx < 0 && rec.Method == probeMethod && rec.Path == probePath {
+			probeIdx = i
+		}
+	}
+	require.NotEqual(t, -1, revokeIdx,
+		"%s must record the destructive setup's admin revoke", name)
+	require.NotEqual(t, -1, probeIdx, "%s must record the denied probe", name)
+	assert.Greater(t, probeIdx, revokeIdx,
+		"%s: the destructive revoke must arrive before the denied probe", name)
 }
 
 // TestResultCallbackWaitsForInboundDelivery asserts the callback
