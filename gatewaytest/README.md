@@ -39,11 +39,16 @@ packages (including `internal/*` where a fake must mint real tokens).
 - `handlers_routes.go` — one canned handler per §9.6 route row
 - `handlers_idempotency.go` — per-key idempotency store: reserve,
   replay a stored 2xx, release on non-2xx
+- `handlers_jti.go` — `EnforceSingleUsePartyJTI` opt-in single-use
+  party jti enforcement: an already-seen bearer jti on a §9.6 route
+  answers 401 GW-ADMIN-004 (checked after scripted steps, before the
+  idempotency store; off by default, admin fakes unaffected)
 - `handlers_script.go` — `ScriptStep`, `Gate`, `Script`, `Block`
   (scripted sequences and request gates for retry tests)
 - tests split per unit: `golden_test.go`, `fixtures_test.go`,
   `jwksserver_test.go`, `minter_test.go`, `replay_test.go`,
-  `manifest_test.go`, `handlers_test.go`, `handlers_admin_test.go`
+  `manifest_test.go`, `handlers_test.go`, `handlers_admin_test.go`,
+  `handlers_jti_test.go`
   (each ≤ 300 lines)
 
 **Built by**: `docs/tasks/01-foundation-test-kit.md` (v1), extended in
