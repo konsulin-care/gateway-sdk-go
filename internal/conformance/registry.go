@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"net/http"
+
+	"github.com/konsulin-care/gateway-sdk-go/internal/adminboot"
+	"github.com/konsulin-care/gateway-sdk-go/wire"
 )
 
 // Kind classifies a conformance case: a positive QC-chain step or a
@@ -73,6 +76,47 @@ func (e *Env) client() *http.Client {
 	return http.DefaultClient
 }
 
+// revokeWebhookInvoke revokes the env party's webhook:invoke grant at
+// DELETE /v1/admin/parties/{id}/capabilities/webhook:invoke after a
+// fresh adminboot login, so the capability-denied probe arrives
+// strictly after the revoke.
+//
+// Parameters: ctx bounds the admin calls; name is the case name the
+// wrapped failures carry.
+// Returns: nil when the login and the revoke both succeed, or the
+// failure.
+func (e *Env) revokeWebhookInvoke(ctx context.Context, name string) error {
+	ab := adminboot.New(e.BaseURL, e.client())
+	bearer, err := ab.Login(ctx, e.AdminUser, e.AdminPass)
+	if err != nil {
+		return named(name+": admin login", err)
+	}
+	if err := ab.RevokeCapability(ctx, bearer, e.PartyID, wire.CapabilityWebhookInvoke); err != nil {
+		return named(name+": revoke webhook:invoke", err)
+	}
+	return nil
+}
+
+// revokeParty revokes the env party at POST /v1/admin/parties/{id}/
+// revoke after a fresh adminboot login, so the revoked-party probe
+// arrives strictly after the revoke.
+//
+// Parameters: ctx bounds the admin calls; name is the case name the
+// wrapped failures carry.
+// Returns: nil when the login and the revoke both succeed, or the
+// failure.
+func (e *Env) revokeParty(ctx context.Context, name string) error {
+	ab := adminboot.New(e.BaseURL, e.client())
+	bearer, err := ab.Login(ctx, e.AdminUser, e.AdminPass)
+	if err != nil {
+		return named(name+": admin login", err)
+	}
+	if err := ab.RevokeParty(ctx, bearer, e.PartyID); err != nil {
+		return named(name+": revoke party", err)
+	}
+	return nil
+}
+
 // QCChainNames is the SDK-CONF-001 QC-chain step list in chain order:
 // gateway health, admin bootstrap (login → create party → issue
 // enrollment token), then enrollment, rotation, JWKS, identities,
@@ -95,8 +139,11 @@ var QCChainNames = []string{
 // NegativeNames is the SDK-CONF-002 negative case list in registry
 // order: wrong signing key, replayed enrollment token, wrong typ,
 // body_sha256 mismatch, expired token, unknown kid after one refetch,
-// revoked party, missing capability (capability_denied), and
-// idempotency replay (byte-identical response).
+// idempotency replay (byte-identical response), missing capability
+// (capability_denied) after the webhook:invoke revoke, and revoked
+// party after the admin party revoke. The three terminal cases run
+// last in that order: the replay still needs the granted capability,
+// and revoking the party ends the run.
 var NegativeNames = []string{
 	"wrong-signing-key",
 	"replayed-enrollment-token",
@@ -104,9 +151,9 @@ var NegativeNames = []string{
 	"body-sha256-mismatch",
 	"expired-token",
 	"unknown-kid",
-	"revoked-party",
-	"capability-denied",
 	"idempotency-replay",
+	"capability-denied",
+	"revoked-party",
 }
 
 // positiveCases builds the ordered positive QC-chain cases.
@@ -126,7 +173,9 @@ func positiveCases() []Case {
 	}
 }
 
-// negativeCases builds the ordered SDK-CONF-002 deny cases.
+// negativeCases builds the ordered SDK-CONF-002 deny cases: every
+// NegativeNames entry paired with its run function, ending in the
+// idempotency replay and the two admin-revoke observations.
 func negativeCases() []Case {
 	return []Case{
 		{Name: "wrong-signing-key", Kind: KindNegative, Run: negativeWrongSigningKey},
@@ -135,9 +184,9 @@ func negativeCases() []Case {
 		{Name: "body-sha256-mismatch", Kind: KindNegative, Run: negativeBodySHA256Mismatch},
 		{Name: "expired-token", Kind: KindNegative, Run: negativeExpiredToken},
 		{Name: "unknown-kid", Kind: KindNegative, Run: negativeUnknownKid},
-		{Name: "revoked-party", Kind: KindNegative, Run: negativeRevokedParty},
-		{Name: "capability-denied", Kind: KindNegative, Run: negativeCapabilityDenied},
 		{Name: "idempotency-replay", Kind: KindNegative, Run: negativeIdempotencyReplay},
+		{Name: "capability-denied", Kind: KindNegative, Run: negativeCapabilityDenied},
+		{Name: "revoked-party", Kind: KindNegative, Run: negativeRevokedParty},
 	}
 }
 

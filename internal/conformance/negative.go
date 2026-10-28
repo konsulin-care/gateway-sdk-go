@@ -109,9 +109,8 @@ func negativeWrongTyp(ctx context.Context, env *Env) error {
 	return nil
 }
 
-// negativeBodySHA256Mismatch builds a bound enrollment, then re-marshals
-// the body so its bytes change while its fields stay identical; the
-// proof's body_sha256 no longer matches and the send must deny.
+// negativeBodySHA256Mismatch re-marshals a bound enrollment body so
+// the proof's body_sha256 no longer matches: the send must deny.
 func negativeBodySHA256Mismatch(ctx context.Context, env *Env) error {
 	const name = "body-sha256-mismatch"
 	now := time.Now().Unix()
@@ -207,10 +206,13 @@ func negativeUnknownKid(ctx context.Context, env *Env) error {
 	return nil
 }
 
-// negativeRevokedParty denies a perfectly valid party token on a party
-// route once the party is revoked: 403 GW-PARTY-002.
+// negativeRevokedParty revokes the party over a fresh adminboot
+// login, then denies a valid party token: 403 GW-PARTY-002.
 func negativeRevokedParty(ctx context.Context, env *Env) error {
 	const name = "revoked-party"
+	if err := env.revokeParty(ctx, name); err != nil {
+		return err
+	}
 	tok, err := partyToken(env, wire.TypParty)
 	if err != nil {
 		return named(name, err)
@@ -222,10 +224,13 @@ func negativeRevokedParty(ctx context.Context, env *Env) error {
 	return named(name, expectDeny(status, body, http.StatusForbidden, "GW-PARTY-002"))
 }
 
-// negativeCapabilityDenied enqueues a webhook with a valid party token
-// but no webhook:invoke grant: 403 capability_denied.
+// negativeCapabilityDenied revokes webhook:invoke over a fresh admin
+// login, then enqueues with a valid token: 403 capability_denied.
 func negativeCapabilityDenied(ctx context.Context, env *Env) error {
 	const name = "capability-denied"
+	if err := env.revokeWebhookInvoke(ctx, name); err != nil {
+		return err
+	}
 	tok, err := partyToken(env, wire.TypParty)
 	if err != nil {
 		return named(name, err)
@@ -247,9 +252,8 @@ func negativeCapabilityDenied(ctx context.Context, env *Env) error {
 	return named(name, expectDeny(status, body, http.StatusForbidden, wire.CodeCapabilityDenied))
 }
 
-// negativeIdempotencyReplay requires the same key plus same body to
-// replay byte-identically, and the same key plus a different body to
-// deny 422 GW-HOOK-008.
+// negativeIdempotencyReplay requires one key plus one body to replay
+// byte-identically, and a conflicting body to deny 422 GW-HOOK-008.
 func negativeIdempotencyReplay(ctx context.Context, env *Env) error {
 	const name = "idempotency-replay"
 	tok, err := partyToken(env, wire.TypParty)
