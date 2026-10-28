@@ -196,6 +196,87 @@ func TestBootstrapChain(t *testing.T) {
 	}, paths)
 }
 
+// TestSetTierReturnsAppliedTier asserts SetTier posts the requested
+// tier to POST /v1/admin/parties/{id}/tier with the admin bearer and
+// returns the tier the gateway applied.
+func TestSetTierReturnsAppliedTier(t *testing.T) {
+	g, c := newAdminboot(t)
+
+	token, err := c.Login(context.Background(), adminUser, adminPass)
+	require.NoError(t, err)
+
+	partyID := "01HZYADMINPARTY00000"
+	tier, err := c.SetTier(context.Background(), token, partyID, "authorized")
+	require.NoError(t, err)
+	assert.Equal(t, "authorized", tier)
+
+	path := "/v1/admin/parties/" + partyID + "/tier"
+	rec := recordedTo(t, g, path)
+	assert.Equal(t, http.MethodPost, rec.Method)
+	assert.Equal(t, "Bearer "+token, rec.Authorization)
+}
+
+// TestSetTierFailureSurfacesWireError asserts a non-2xx from the tier
+// route surfaces as a *wire.Error carrying the gateway envelope, and
+// that the admin bearer never appears in the error text.
+func TestSetTierFailureSurfacesWireError(t *testing.T) {
+	_, c := newAdminboot(t)
+
+	token, err := c.Login(context.Background(), adminUser, adminPass)
+	require.NoError(t, err)
+
+	corrupted := token + "-corrupted"
+	_, err = c.SetTier(context.Background(), corrupted, "01HZYADMINPARTY00000", "authorized")
+	require.Error(t, err)
+
+	var werr *wire.Error
+	require.True(t, errors.As(err, &werr), "401 must surface as *wire.Error, got %T", err)
+	assert.Equal(t, "GW-ADMIN-001", werr.Code)
+	assert.Equal(t, http.StatusUnauthorized, werr.Status)
+	assert.NotContains(t, err.Error(), token)
+	assert.NotContains(t, err.Error(), corrupted)
+}
+
+// TestRevokeCapabilitySucceeds asserts RevokeCapability issues DELETE
+// to /v1/admin/parties/{id}/capabilities/{capability} with the admin
+// bearer and returns no error on 2xx.
+func TestRevokeCapabilitySucceeds(t *testing.T) {
+	g, c := newAdminboot(t)
+
+	token, err := c.Login(context.Background(), adminUser, adminPass)
+	require.NoError(t, err)
+
+	partyID := "01HZYADMINPARTY00000"
+	require.NoError(t, c.RevokeCapability(context.Background(), token, partyID, wire.CapabilityWebhookInvoke))
+
+	path := "/v1/admin/parties/" + partyID + "/capabilities/" + wire.CapabilityWebhookInvoke
+	rec := recordedTo(t, g, path)
+	assert.Equal(t, http.MethodDelete, rec.Method)
+	assert.Equal(t, "Bearer "+token, rec.Authorization)
+}
+
+// TestRevokeCapabilityFailureSurfacesWireError asserts a non-2xx from
+// the capability revoke route surfaces as a *wire.Error carrying the
+// gateway envelope, and that the admin bearer never appears in the
+// error text.
+func TestRevokeCapabilityFailureSurfacesWireError(t *testing.T) {
+	_, c := newAdminboot(t)
+
+	token, err := c.Login(context.Background(), adminUser, adminPass)
+	require.NoError(t, err)
+
+	corrupted := token + "-corrupted"
+	err = c.RevokeCapability(context.Background(), corrupted, "01HZYADMINPARTY00000", wire.CapabilityWebhookInvoke)
+	require.Error(t, err)
+
+	var werr *wire.Error
+	require.True(t, errors.As(err, &werr), "401 must surface as *wire.Error, got %T", err)
+	assert.Equal(t, "GW-ADMIN-001", werr.Code)
+	assert.Equal(t, http.StatusUnauthorized, werr.Status)
+	assert.NotContains(t, err.Error(), token)
+	assert.NotContains(t, err.Error(), corrupted)
+}
+
 // keysOf returns the key set of a decoded JSON object.
 func keysOf(m map[string]any) []string {
 	out := make([]string, 0, len(m))
