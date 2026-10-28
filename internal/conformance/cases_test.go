@@ -180,8 +180,10 @@ func TestConformanceNegativeCasesAllNamed(t *testing.T) {
 // TestIdempotencyReplaySyncService asserts the idempotency-replay
 // case sends Env.ListingService as the sync request's service field,
 // defaulting to the chain listing name when the env leaves it empty,
-// and that its three probes reuse one idempotency key with the first
-// two bodies byte-identical (the replay) and the third conflicting.
+// that its three probes reuse one idempotency key with the first two
+// bodies byte-identical (the replay) and the third conflicting, and —
+// under the fake's single-use party jti enforcement — that every probe
+// carries a fresh, non-empty party jti instead of replaying one token.
 func TestIdempotencyReplaySyncService(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -195,6 +197,7 @@ func TestIdempotencyReplaySyncService(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := gatewaytest.NewGateway()
 			t.Cleanup(g.Close)
+			g.EnforceSingleUsePartyJTI()
 			env := negativeEnv(g)
 			env.ListingService = tc.listingService
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -222,6 +225,16 @@ func TestIdempotencyReplaySyncService(t *testing.T) {
 				var req wire.SyncWebhookRequest
 				require.NoError(t, json.Unmarshal(rec.Body, &req), "decode sync probe %d body", i)
 				assert.Equal(t, tc.want, req.Service, "sync probe %d service", i)
+			}
+			// Single-use jti enforcement is on: every probe must mint a
+			// fresh party token, so each probe carries a distinct jti.
+			seen := make(map[string]int, len(syncs))
+			for i, rec := range syncs {
+				require.NotEmpty(t, rec.PartyJTI, "sync probe %d must carry a party jti", i)
+				prev, dup := seen[rec.PartyJTI]
+				require.False(t, dup,
+					"sync probe %d replays probe %d's party jti %q", i, prev, rec.PartyJTI)
+				seen[rec.PartyJTI] = i
 			}
 		})
 	}

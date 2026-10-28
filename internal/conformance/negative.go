@@ -1,7 +1,6 @@
 package conformance
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -250,51 +249,4 @@ func negativeCapabilityDenied(ctx context.Context, env *Env) error {
 		return named(name, err)
 	}
 	return named(name, expectDeny(status, body, http.StatusForbidden, wire.CodeCapabilityDenied))
-}
-
-// negativeIdempotencyReplay requires one key plus one body to replay
-// byte-identically, and a conflicting body to deny 422 GW-HOOK-008.
-func negativeIdempotencyReplay(ctx context.Context, env *Env) error {
-	const name = "idempotency-replay"
-	tok, err := partyToken(env, wire.TypParty)
-	if err != nil {
-		return named(name, err)
-	}
-	service := env.listingService()
-	first, err := json.Marshal(wire.SyncWebhookRequest{
-		To: env.PartyID, Service: service, Payload: json.RawMessage(`{"n":1}`),
-	})
-	if err != nil {
-		return named(name, err)
-	}
-	conflict, err := json.Marshal(wire.SyncWebhookRequest{
-		To: env.PartyID, Service: service, Payload: json.RawMessage(`{"n":2}`),
-	})
-	if err != nil {
-		return named(name, err)
-	}
-	idem, err := auth.NewJti()
-	if err != nil {
-		return named(name, err)
-	}
-	const path = "/v1/webhooks/sync"
-	s1, b1, err := probe(ctx, env, http.MethodPost, path, tok, idem, first)
-	if err != nil {
-		return named(name, err)
-	}
-	if s1 < 200 || s1 > 299 {
-		return named(name, fmt.Errorf("first sync status %d, want 2xx", s1))
-	}
-	s2, b2, err := probe(ctx, env, http.MethodPost, path, tok, idem, first)
-	if err != nil {
-		return named(name, err)
-	}
-	if s2 != s1 || !bytes.Equal(b1, b2) {
-		return named(name, fmt.Errorf("replay status %d (want %d) or body not byte-identical", s2, s1))
-	}
-	s3, b3, err := probe(ctx, env, http.MethodPost, path, tok, idem, conflict)
-	if err != nil {
-		return named(name, err)
-	}
-	return named(name, expectDeny(s3, b3, http.StatusUnprocessableEntity, "GW-HOOK-008"))
 }
