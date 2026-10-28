@@ -219,3 +219,78 @@ func TestGatewaytestAdminRequestsRecorded(t *testing.T) {
 	assert.Equal(t, "admin-idem-1", recorded[1].IdempotencyKey)
 	assert.Equal(t, createBody, recorded[1].Body)
 }
+
+// TestGatewaytestAdminCapabilityRevoke asserts the canned DELETE
+// capability revoke: the Bruno revoke shape with the admin bearer
+// token and 401 GW-ADMIN-001 without it; non-canned DELETE paths 404.
+func TestGatewaytestAdminCapabilityRevoke(t *testing.T) {
+	g := newTestGateway(t)
+	g.EnableAdmin(adminTestOptions)
+	const pid = "01HZYADMINPARTY00000"
+	authz := "Bearer " + adminToken
+	status, header, body := gatewayIssue(t, g, http.MethodDelete,
+		"/v1/admin/parties/"+pid+"/capabilities/webhook:invoke", authz, "", nil)
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, "application/json", header.Get("Content-Type"))
+	var revoked struct {
+		PartyID    string `json:"party_id"`
+		Capability string `json:"capability"`
+		Direction  string `json:"direction"`
+		Status     string `json:"status"`
+	}
+	require.NoError(t, json.Unmarshal(body, &revoked))
+	assert.Equal(t, pid, revoked.PartyID)
+	assert.Equal(t, "webhook:invoke", revoked.Capability)
+	assert.Equal(t, "out", revoked.Direction)
+	assert.Equal(t, "revoked", revoked.Status)
+	status, _, body = gatewayIssue(t, g, http.MethodDelete,
+		"/v1/admin/parties/"+pid+"/capabilities/accept:register", authz, "", nil)
+	require.Equal(t, http.StatusOK, status)
+	require.NoError(t, json.Unmarshal(body, &revoked))
+	assert.Equal(t, "accept:register", revoked.Capability)
+	assert.Equal(t, "in", revoked.Direction)
+	assert.Equal(t, "revoked", revoked.Status)
+	status, _, body = gatewayIssue(t, g, http.MethodDelete,
+		"/v1/admin/parties/"+pid+"/capabilities/webhook:invoke", "", "", nil)
+	require.Equal(t, http.StatusUnauthorized, status)
+	requireEnvelopeCode(t, body, "GW-ADMIN-001")
+	status, _, body = gatewayIssue(t, g, http.MethodDelete,
+		"/v1/admin/parties/"+pid+"/revoke", authz, "", nil)
+	assert.Equal(t, http.StatusNotFound, status, "non-canned DELETE path stays 404")
+	assert.Equal(t, "404 page not found\n", string(body))
+}
+
+// TestGatewaytestAdminPartyTier asserts the canned POST party tier:
+// the Bruno {party_id, tier} success shape echoing the requested tier
+// with the admin bearer token, 401 without it, 404 on other subs.
+func TestGatewaytestAdminPartyTier(t *testing.T) {
+	g := newTestGateway(t)
+	g.EnableAdmin(adminTestOptions)
+	const pid = "01HZYADMINPARTY00000"
+	path := "/v1/admin/parties/" + pid + "/tier"
+	authz := "Bearer " + adminToken
+	status, header, body := gatewayIssue(t, g, http.MethodPost, path,
+		authz, "tier-1", []byte(`{"tier":"konsulin"}`))
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, "application/json", header.Get("Content-Type"))
+	var resp struct {
+		PartyID string `json:"party_id"`
+		Tier    string `json:"tier"`
+	}
+	require.NoError(t, json.Unmarshal(body, &resp))
+	assert.Equal(t, pid, resp.PartyID)
+	assert.Equal(t, "konsulin", resp.Tier)
+	status, _, body = gatewayIssue(t, g, http.MethodPost, path,
+		authz, "tier-2", []byte(`{"tier":"authorized"}`))
+	require.Equal(t, http.StatusOK, status)
+	require.NoError(t, json.Unmarshal(body, &resp))
+	assert.Equal(t, "authorized", resp.Tier)
+	status, _, body = gatewayIssue(t, g, http.MethodPost, path, "", "tier-3",
+		[]byte(`{"tier":"konsulin"}`))
+	require.Equal(t, http.StatusUnauthorized, status)
+	requireEnvelopeCode(t, body, "GW-ADMIN-001")
+	status, _, body = gatewayIssue(t, g, http.MethodPost,
+		"/v1/admin/parties/"+pid+"/unknown-sub", authz, "tier-4", nil)
+	assert.Equal(t, http.StatusNotFound, status, "non-canned admin path stays 404")
+	assert.Equal(t, "404 page not found\n", string(body))
+}

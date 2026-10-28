@@ -41,11 +41,12 @@ type adminConfig struct {
 // EnableAdmin opts the fake gateway in to the canned admin handlers for
 // POST /v1/admin/auth/login (username/password only — the totp field is
 // ignored), POST /v1/admin/parties, POST /v1/admin/parties/{id}/
-// enrollment-token, the capability grant, and the party revoke, with
-// the response shapes of the Bruno admin collection. The login issues
-// the canned admin bearer token; the four authed routes accept only
-// that token and answer 401 GW-ADMIN-001 without it. Admin paths not in
-// that set — and every admin path while disabled — keep answering 404.
+// enrollment-token, the capability grant and revoke, the party revoke,
+// and the party tier, with the response shapes of the Bruno admin
+// collection. The login issues the canned admin bearer token; every
+// authed route accepts only that token and answers 401 GW-ADMIN-001
+// without it. Admin paths not in that set — and every admin path while
+// disabled — keep answering 404.
 //
 // Parameters: opts carries the operator credentials the login fake
 // accepts. Requests are recorded in Recorded() like party requests.
@@ -64,9 +65,13 @@ func (g *Gateway) adminEnabled() *adminConfig {
 }
 
 // serveAdmin serves one request when the admin fakes are enabled and
-// the path is one of the five canned admin routes; false falls through
-// to the §9.6 route table, where admin paths 404 as before.
+// the method and path match one of the canned admin routes; false
+// falls through to the §9.6 route table, where admin paths 404 as
+// before.
 func (g *Gateway) serveAdmin(w http.ResponseWriter, r *http.Request, body []byte, cfg *adminConfig) bool {
+	if r.Method == http.MethodDelete {
+		return serveAdminDelete(w, r)
+	}
 	if r.Method != http.MethodPost {
 		return false
 	}
@@ -174,10 +179,37 @@ func serveAdminPartySubroute(w http.ResponseWriter, partyID, sub string, body []
 		serveAdminGrantCapability(w, partyID, body)
 	case "revoke":
 		serveAdminRevokeParty(w, partyID)
+	case "tier":
+		serveAdminPartyTier(w, partyID, body)
 	default:
 		return false
 	}
 	return true
+}
+
+// serveAdminDelete dispatches the one canned DELETE admin route —
+// DELETE /v1/admin/parties/{id}/capabilities/{capability} — returning
+// false for any other method/path pair so the request falls through to
+// the route table and 404s.
+func serveAdminDelete(w http.ResponseWriter, r *http.Request) bool {
+	segs := splitPath(r.URL.Path)
+	if !isAdminCapabilityRevoke(segs) {
+		return false
+	}
+	if !adminAuthorized(r) {
+		serveAdminUnauthorized(w)
+		return true
+	}
+	serveAdminRevokeCapability(w, segs[3], segs[5])
+	return true
+}
+
+// isAdminCapabilityRevoke reports whether segments are the capability
+// revoke route: /v1/admin/parties/{id}/capabilities/{capability} with
+// non-empty id and capability.
+func isAdminCapabilityRevoke(segs []string) bool {
+	return len(segs) == 6 && segs[2] == "parties" && segs[3] != "" &&
+		segs[4] == "capabilities" && segs[5] != ""
 }
 
 // serveAdminEnrollmentToken fakes POST /v1/admin/parties/{id}/
@@ -218,5 +250,37 @@ func serveAdminGrantCapability(w http.ResponseWriter, partyID string, body []byt
 func serveAdminRevokeParty(w http.ResponseWriter, partyID string) {
 	writeBody(w, http.StatusOK, marshalExample(map[string]any{
 		"party_id": partyID, "state": "revoked",
+	}))
+}
+
+// serveAdminRevokeCapability fakes DELETE /v1/admin/parties/{id}/
+// capabilities/{capability}: echoes the path party id and capability
+// as revoked; accept:* ids are direction in, everything else out (the
+// Bruno derivation, matching the grant fake).
+func serveAdminRevokeCapability(w http.ResponseWriter, partyID, capability string) {
+	direction := "out"
+	if strings.HasPrefix(capability, "accept:") {
+		direction = "in"
+	}
+	writeBody(w, http.StatusOK, marshalExample(map[string]any{
+		"party_id": partyID, "capability": capability,
+		"direction": direction, "status": "revoked",
+	}))
+}
+
+// serveAdminPartyTier fakes POST /v1/admin/parties/{id}/tier: the
+// Bruno success shape echoing the path party id and the requested
+// tier. An undecodable or empty body serves the Bruno QC-path example
+// tier konsulin — the fake serves the success path only.
+func serveAdminPartyTier(w http.ResponseWriter, partyID string, body []byte) {
+	var req struct {
+		Tier string `json:"tier"`
+	}
+	_ = json.Unmarshal(body, &req)
+	if req.Tier == "" {
+		req.Tier = "konsulin"
+	}
+	writeBody(w, http.StatusOK, marshalExample(map[string]any{
+		"party_id": partyID, "tier": req.Tier,
 	}))
 }
