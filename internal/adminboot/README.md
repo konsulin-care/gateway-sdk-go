@@ -17,7 +17,8 @@ routes in the public surface).
 **Files** (actual):
 - `doc.go` — package doc
 - `login.go` — admin session login
-- `parties.go` — party creation and enrollment-token issuance
+- `parties.go` — party creation (organization identity, tier, endpoints) and
+  enrollment-token issuance
 - `capabilities.go` — capability grants and revokes, party revokes
 - `tier.go` — `SetTier` party tier changes
 - `adminboot_test.go` — against `gatewaytest` fakes

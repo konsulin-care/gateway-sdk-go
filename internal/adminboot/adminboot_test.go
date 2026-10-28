@@ -107,6 +107,45 @@ func TestCreatePartySendsAdminBearer(t *testing.T) {
 	assert.Equal(t, "Bearer "+token, rec.Authorization)
 }
 
+// TestCreatePartySendsEndpoints asserts CreateParty marshals the
+// Endpoints map as an endpoints object mapping each endpoint name to
+// its URL string, and omits the key entirely when Endpoints is nil.
+func TestCreatePartySendsEndpoints(t *testing.T) {
+	g, c := newAdminboot(t)
+
+	token, err := c.Login(context.Background(), adminUser, adminPass)
+	require.NoError(t, err)
+
+	_, err = c.CreateParty(context.Background(), token, adminboot.CreatePartyRequest{
+		OrgName:       "Klinik Sehat",
+		OrgIdentifier: "org-klinik-sehat",
+		Endpoints: map[string]string{
+			"payments.create": "https://klinik.example.com/payments",
+			"webhooks.invoke": "https://klinik.example.com/webhooks",
+		},
+	})
+	require.NoError(t, err)
+
+	rec := recordedTo(t, g, "/v1/admin/parties")
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body, &body))
+	endpoints, ok := body["endpoints"].(map[string]any)
+	require.True(t, ok, "endpoints must be an object, got %T", body["endpoints"])
+	assert.Equal(t, "https://klinik.example.com/payments", endpoints["payments.create"])
+	assert.Equal(t, "https://klinik.example.com/webhooks", endpoints["webhooks.invoke"])
+
+	_, err = c.CreateParty(context.Background(), token, adminboot.CreatePartyRequest{
+		OrgName:       "Klinik Sehat",
+		OrgIdentifier: "org-klinik-sehat",
+	})
+	require.NoError(t, err)
+
+	rec = recordedTo(t, g, "/v1/admin/parties")
+	body = map[string]any{}
+	require.NoError(t, json.Unmarshal(rec.Body, &body))
+	assert.NotContains(t, keysOf(body), "endpoints", "nil Endpoints must marshal without an endpoints key")
+}
+
 // TestIssueEnrollmentTokenReturnsToken asserts IssueEnrollmentToken
 // requests the enrollment token for the given party id with the admin
 // bearer and returns the plaintext token.

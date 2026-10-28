@@ -8,7 +8,7 @@ import (
 )
 
 // CreatePartyRequest is the POST /v1/admin/parties body: the new
-// party's organization identity and tier.
+// party's organization identity, tier, and bootstrap endpoints.
 type CreatePartyRequest struct {
 	// OrgName is the human-readable organization name.
 	OrgName string `json:"org_name"`
@@ -16,6 +16,9 @@ type CreatePartyRequest struct {
 	OrgIdentifier string `json:"org_identifier"`
 	// Tier is the party tier ("authorized", ...).
 	Tier string `json:"tier,omitempty"`
+	// Endpoints maps endpoint names to their URL strings, marshaled as
+	// the endpoints object; omitted when nil.
+	Endpoints map[string]string `json:"endpoints,omitempty"`
 }
 
 // createPartyResponse is the Bruno success shape of party creation:
