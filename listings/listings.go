@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/konsulin-care/gateway-sdk-go/client"
 	"github.com/konsulin-care/gateway-sdk-go/wire"
@@ -70,16 +71,28 @@ func (c *Client) Create(ctx context.Context, req wire.CreateListingRequest) (*wi
 // carries metering ("gateway" or "provider"); endpoint_url is present
 // for commodity rows and omitted for invocation=webhook rows — the
 // public read never exposes a provider endpoint.
-// Parameters: ctx is the call context.
+// Parameters: ctx is the call context; opts are the optional GWP-005
+// filters (WithName, WithProviderPartyID, WithInvocation) encoded as
+// query parameters — with no options no query string is sent.
 // Returns: the decoded GetListingsResponse (active listings only), or
 // an error — a gateway failure surfaces as *wire.Error
 // (SDK-CLIENT-003). Never panics.
-func (c *Client) List(ctx context.Context) (*wire.GetListingsResponse, error) {
-	resp, err := c.cli.Do(ctx, client.Request{
+func (c *Client) List(ctx context.Context, opts ...ListOption) (*wire.GetListingsResponse, error) {
+	req := client.Request{
 		Method: http.MethodGet,
 		Path:   "/v1/listings",
 		Auth:   wire.AuthPublic,
-	})
+	}
+	if len(opts) > 0 {
+		q := make(url.Values, len(opts))
+		for _, opt := range opts {
+			if opt != nil {
+				opt(q)
+			}
+		}
+		req.Query = q
+	}
+	resp, err := c.cli.Do(ctx, req)
 	if err != nil {
 		return nil, err
 	}
