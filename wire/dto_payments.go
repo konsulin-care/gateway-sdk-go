@@ -18,6 +18,12 @@ type CreatePaymentRequest struct {
 	// Amount is the seller-mode amount (>= 1); listing mode reads
 	// the price from the listing row instead.
 	Amount int64 `json:"amount,omitempty"`
+	// SuccessReturnURL is the optional buyer redirect after a
+	// successful checkout.
+	SuccessReturnURL string `json:"success_return_url,omitempty"`
+	// CancelReturnURL is the optional buyer redirect after a
+	// canceled checkout.
+	CancelReturnURL string `json:"cancel_return_url,omitempty"`
 }
 
 // CreatePaymentResponse is the 200 body of POST /v1/payments. The
