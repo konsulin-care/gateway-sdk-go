@@ -7,7 +7,7 @@
 
 **Usage**:
 
-    conformance [-base-url url] [-operator-user user] [-callback addr] [-callback-url url] [-version]
+    conformance [-base-url url] [-operator-user user] [-callback addr] [-callback-url url] [-party-health-url url] [-version]
 
 | Flag         | Env                          | Meaning                                    |
 |--------------|------------------------------|--------------------------------------------|
@@ -16,6 +16,7 @@
 | —            | `CONFORMANCE_OPERATOR_PASSWORD` | operator password (required, env only — no flag, no TOTP) |
 | `-callback`  | `CONFORMANCE_CALLBACK_ADDR`  | result-callback listen `host:port` (empty binds an ephemeral loopback listener) |
 | `-callback-url` | `CONFORMANCE_CALLBACK_URL` | externally reachable result-callback URL (empty uses the receiver's loopback URL) |
+| `-party-health-url` | `CONFORMANCE_PARTY_HEALTH_URL` | QC-chain party health URL the bootstrap registers (empty uses the runner default `http://127.0.0.1:8080/health`) |
 | `-version`   | —                            | print the runner version (Go build info, SDK-CONF-003) and exit 0 |
 
 **Fixed-port CI wiring**: in CI the receiver binds a fixed loopback port via

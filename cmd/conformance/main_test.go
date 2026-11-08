@@ -125,13 +125,37 @@ func TestConfigReadsCallbackURLFromEnvAndFlagOverrides(t *testing.T) {
 		return "", false
 	}
 
-	cfg := configFrom(lookup, "", "", "", "")
+	cfg := configFrom(lookup, "", "", "", "", "")
 	require.NotNil(t, cfg, "the config must resolve")
 	assert.Equal(t, envURL, cfg.CallbackURL,
 		"the config must read CONFORMANCE_CALLBACK_URL from the environment")
 
-	cfg = configFrom(lookup, "", "", "", flagURL)
+	cfg = configFrom(lookup, "", "", "", flagURL, "")
 	require.NotNil(t, cfg, "the config must resolve")
 	assert.Equal(t, flagURL, cfg.CallbackURL,
 		"the -callback-url flag must override CONFORMANCE_CALLBACK_URL")
+}
+
+// TestConfigReadsPartyHealthURLFromEnvAndFlagOverrides asserts the
+// party health URL resolves from flag, then env, else empty.
+func TestConfigReadsPartyHealthURLFromEnvAndFlagOverrides(t *testing.T) {
+	const (
+		envURL  = "http://env.example.test:8080/health"
+		flagURL = "http://flag.example.test:9090/health"
+	)
+	lookup := func(name string) (string, bool) {
+		if name == "CONFORMANCE_PARTY_HEALTH_URL" {
+			return envURL, true
+		}
+		return "", false
+	}
+
+	assert.Equal(t, flagURL, configFrom(noEnv, "", "", "", "", flagURL).PartyHealthURL,
+		"the -party-health-url flag must set PartyHealthURL")
+	assert.Equal(t, envURL, configFrom(lookup, "", "", "", "", "").PartyHealthURL,
+		"the env must set PartyHealthURL when the flag is empty")
+	assert.Empty(t, configFrom(noEnv, "", "", "", "", "").PartyHealthURL,
+		"PartyHealthURL stays empty when both are unset")
+	assert.Equal(t, flagURL, configFrom(lookup, "", "", "", "", flagURL).PartyHealthURL,
+		"the flag must override CONFORMANCE_PARTY_HEALTH_URL")
 }
