@@ -64,6 +64,23 @@ func (s KeySet) EncByKid(kid string) (Key, bool) {
 	return s.selectBy(kid, isEncryptionKey)
 }
 
+// EncKeys enumerates the encryption keys of the set: OKP/X25519 keys
+// carrying use "enc", in document order. It backs the sender-side
+// recipient-key resolution (exactly one such key must exist) and is never
+// re-exported.
+//
+// Returns: the use:enc keys, or nil when the set holds none. Signing
+// keys never appear here.
+func (s KeySet) EncKeys() []Key {
+	var out []Key
+	for _, key := range s.Keys {
+		if isEncryptionKey(key) {
+			out = append(out, key)
+		}
+	}
+	return out
+}
+
 // selectBy returns the first key with the given kid that satisfies the kind
 // predicate. An empty kid matches nothing.
 func (s KeySet) selectBy(kid string, kind func(Key) bool) (Key, bool) {
