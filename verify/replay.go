@@ -4,15 +4,17 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/konsulin-care/gateway-sdk-go/wire"
 )
 
-// Replay cache scopes: the two key spaces a ReplayCache keeps apart so a
-// webhook_id never collides with a jti.
+// Replay cache scopes, aliased from wire so a webhook_id never collides
+// with a jti.
 const (
 	// ScopeJTI scopes a replay-cache entry to a token jti.
-	ScopeJTI = "jti"
+	ScopeJTI = wire.ScopeJTI
 	// ScopeWebhookID scopes a replay-cache entry to a webhook_id.
-	ScopeWebhookID = "webhook_id"
+	ScopeWebhookID = wire.ScopeWebhookID
 )
 
 // sweepInterval is the number of Check reservations between full expiry
@@ -30,24 +32,8 @@ const sweepInterval = 1024
 //
 // Implementations must be safe for concurrent use. The in-process default is
 // MemoryReplayCache; multi-instance callers plug their own (e.g. Redis).
-type ReplayCache interface {
-	// Check atomically reserves the (scope, key) pair until until.
-	//
-	// Parameters: ctx carries caller cancellation; scope is ScopeJTI or
-	// ScopeWebhookID; key is the jti or webhook_id value; until is the
-	// instant after which the reservation no longer applies.
-	// Returns: true when the pair is fresh (accepted), false when it is a
-	// replay, or an error — callers deny on error.
-	Check(ctx context.Context, scope, key string, until time.Time) (bool, error)
-
-	// Release frees the (scope, key) reservation, making the key fresh
-	// again. Releasing an unreserved pair is a no-op.
-	//
-	// Parameters: ctx carries caller cancellation; scope is ScopeJTI or
-	// ScopeWebhookID; key is the jti or webhook_id value.
-	// Returns: nil on success or an error.
-	Release(ctx context.Context, scope, key string) error
-}
+// It is an alias of wire.ReplayCache.
+type ReplayCache = wire.ReplayCache
 
 // MemoryReplayCache is the in-process ReplayCache default: a mutex-guarded
 // map of (scope, key) pairs to their reservation deadline. It is safe for
