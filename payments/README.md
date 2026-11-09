@@ -1,7 +1,10 @@
 # payments
 
 **Purpose**: payment routes per PRD §9.6 — `Create` (`POST /v1/payments`,
-capability `payment:create`, `Idempotency-Key` required), `Get`
+capability `payment:create`, `Idempotency-Key` required) carrying the
+optional buyer return URLs `SuccessReturnURL` (`success_return_url`) and
+`CancelReturnURL` (`cancel_return_url`) on `wire.CreatePaymentRequest`
+(both omitted from the JSON when empty), `Get`
 (`GET /v1/payments/{id}`, read — no idempotency key), `AccessToken`
 (`POST /v1/payments/{id}/access-token`, `Idempotency-Key` required).
 Inbound payment callbacks are NOT here — they are covered by `verify`
@@ -16,8 +19,9 @@ package (PRD §9.6).
 **Related requirements**: SDK-API-001, SDK-API-002.
 
 **Files** (actual):
-- `payments.go` — `Client`, `New(cli)`, `Create`, `Get`, `AccessToken`
-  methods (context, `*wire.Error`)
+- `payments.go` — `Client`, `New(cli)`, `Create` (with the
+  `SuccessReturnURL`/`CancelReturnURL` fields of `wire.CreatePaymentRequest`),
+  `Get`, `AccessToken` methods (context, `*wire.Error`)
 - `doc.go` — package doc
 - `payments_test.go` — route tests against `gatewaytest` fakes,
   including the free-path `null` response shapes
