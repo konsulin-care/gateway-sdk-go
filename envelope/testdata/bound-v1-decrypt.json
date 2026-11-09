@@ -1,0 +1,12 @@
+{
+  "recipientPrivate": "49e79490509fe7f57d574befab0868662e30b7601224e053c79f7b96064368f6",
+  "compact": "eyJhbGciOiJFQ0RILUVTIiwiZW5jIjoiQTI1NkdDTSIsImtpZCI6InZlY3Rvci1raWQiLCJlcGsiOnsia3R5IjoiT0tQIiwiY3J2IjoiWDI1NTE5IiwieCI6ImhTRHdDWWt3cDFSMGkzM2N0RDczV2cyX09nMG1PQnIwNjZTcGpxcWJUbW8ifX0..AAECAwQFBgcICQoL.EwgggkGe6VcwkkQyHc_RxBQXX5B9YMQBQpYwMBUNgxz11B9oMCCqgRA93bhMTaeN_Y-ow8LU1KQhhdf0aH3VpTo3vY5D_qFY4OlrltJK7G_MeGsx7X0GSmUGaifaP1QentxmdoIZz24wc6gaFqq1n9BHlAM5EePpkJWVZtKy4I8W51EuzZsLABNSN8HhMG590T3E0e14Y3LkDIrLuLQOKpsyNYMkVFPsHEAG8KaQmWFdg-pd7g.0dQqIo6_bzz6-d6_l9sbUQ",
+  "plaintext": "eyJ2IjoxLCJmcm9tIjoicGFydHktc2VsbGVyIiwidG8iOiJwYXJ0eS1yZWNpcGllbnQiLCJzZXJ2aWNlIjoiY29uc3VsdGF0aW9uIiwiaWF0IjoxNzAwMDAwMDAwLCJub25jZSI6Im04VHFtS3owcU5xS3owcU5xS3owcUEiLCJkYXRhIjoiQVFnUEZoMGtLekk1UUVkT1ZWeGphbkY0ZjRhTmxKdWlxYkMzdnNYTTA5bz0ifQ==",
+  "binding": {
+    "from": "party-seller",
+    "to": "party-recipient",
+    "service": "consultation",
+    "iat": 1700000000,
+    "nonce": "m8TqmKz0qNqKz0qNqKz0qA"
+  }
+}
