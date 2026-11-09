@@ -25,8 +25,8 @@
 - The gateway's conformance CI (ADR-020) runs the SDK conformance runner
   against the gateway and surfaces runner gaps; SDKP-009 is the first
   item driven by it.
-- All changes below are additive, shipped as SDK `v0.2.0` paired with the
-  gateway release carrying GWP-002 / GWP-003 (§4).
+- All changes below are additive and ship together as SDK `v0.1.1`,
+  paired with gateway `v0.1.2` (§4).
 
 ## 2. Requirements
 
@@ -44,15 +44,19 @@ the wrapper and its checks.
    `to`, `service`, `iat`, `nonce`.
 2. `envelope.OpenBound(compact, decrypter, expectations, cache, clock)`
    opens the JWE, checks `v` (unknown rejected), `from`, `to`, `service`,
-   `iat` (older than 5 min or >60 s in the future rejected) and dedupes
-   the nonce via the `ReplayCache` — scope `(from, nonce)`, retention ≥
-   10 min.
+   `iat` — rejected when older than the freshness window (**default 5 min,
+   recipient-configurable up to a 15 min cap**) or more than **60 s** in
+   the future — and dedupes the nonce per the gateway nonce rule: senders
+   use a ≥128-bit random base64url value, recipients accept any non-empty
+   nonce ≤ 64 chars and reject a repeated `(from, nonce)` pair retained
+   for ≥ window + 60 s (**10 min** at the default window) via the
+   `ReplayCache`.
 3. `expectations` derives from the already-verified delivery claims
    (`sub`, `aud`, `service`, `iat`) — callers never pass values the token
    didn't cover (GWP-002).
-4. Ship a **decrypt-only golden vector**: fixed recipient X25519 private
-   key, ciphertext, expected plaintext and binding — so non-Go
-   implementors (n8n `jose`) can verify interop.
+4. Ship an **SDK-owned decrypt fixture** (not mirrored from the gateway):
+   fixed recipient X25519 private key, ciphertext, expected plaintext and
+   binding — so non-Go implementors (n8n `jose`) can verify interop.
 
 **Acceptance.** Round-trip offline tests; replayed-nonce and stale-`iat`
 negatives fail closed; the vector is verified by the n8n reference
@@ -89,12 +93,12 @@ otherwise unchanged.
 **Acceptance.** Golden vector with both claims verifies; claims readable
 from the request context after the middleware.
 
-### SDKP-004 (M) — Payment redirect fields
+### SDKP-004 (M) — Payment return URL fields
 
-**Problem.** GWP-001 adds optional redirect URLs to `POST /v1/payments`;
+**Problem.** GWP-001 adds optional return URLs to `POST /v1/payments`;
 `wire.CreatePaymentRequest` has no fields for them.
 
-**Proposal.** Add `success_redirect_url` and `failure_redirect_url`
+**Proposal.** Add `success_return_url` and `cancel_return_url`
 (`omitempty`) to `wire.CreatePaymentRequest`. No other behavior change —
 validation is the gateway's.
 
@@ -115,8 +119,9 @@ subtle drift.
    the known rule: three parts, and `party`, `domain`, `opaque` must not
    contain `:` (GWP-004).
 3. Typed payload structs for the webhook delivery body
-   `{envelope, result_ticket}`, the sync reply body (compact JWE,
-   `application/jose`) and the async result body `{result}`.
+   `{envelope, result_ticket}` and the sync reply body (compact JWE,
+   `application/jose`); the async result body `{result}` reuses the
+   existing `wire.WebhookResultRequest` — no new type.
 
 **Acceptance.** Round-trip tests per type; malformed `external_id`
 rejected; matches the Bruno settlement and delivery examples.
@@ -144,9 +149,9 @@ JWK match fixed expectations; malformed and truncated inputs fail closed.
 (GWP-005); the SDK's `listings.List` returns everything unfiltered.
 
 **Proposal.** `listings.List` gains filters (`name`, `provider_party_id`,
-`invocation`) matching GWP-005, plus a `FindByName(providerPartyID,
-name)` helper that errors on ambiguity (0 or >1 matches among active
-rows).
+`invocation`) matching GWP-005, carried on the `client.Request.Query`
+(`url.Values`) field, plus a `FindByName(providerPartyID, name)` helper
+that errors on ambiguity (0 or >1 matches among active rows).
 
 **Acceptance.** Offline tests: filter round-trip, single match, ambiguous
 and missing name errors.
@@ -157,8 +162,8 @@ and missing name errors.
    `verify` (today two identical interfaces) — one adapter type in
    consumer code instead of two.
 2. **README fix**: it still says "Pre-v0.1.0" although `v0.1.0` is tagged.
-3. **PRD Go version fix**: `proposal-sdk.md` says Go 1.26; the module is
-   `go 1.27`.
+3. **PRD Go version** — already true: the PRD states Go 1.27 and the
+   module is `go 1.27`; no change needed.
 4. Every contract-affecting item above updates the `COMPATIBILITY.md`
    matrix row and `CHANGELOG.md` in the same PR.
 
@@ -219,11 +224,13 @@ adapter package (`internal/app/drivers/gateway`, the sole importer):
 ## 4. Versioning
 
 All `SDKP-*` items are additive — no breaking change to the `v0.1.0`
-surface. Ship as **`v0.2.0`**, paired with the gateway release carrying
-GWP-002 / GWP-003 (golden mirror updated together). `COMPATIBILITY.md`
-gains the matching row; the existing release gate (green CI, manual
-tagging) and Renovate-driven upgrades stay unchanged.
+surface — and **everything ships as `v0.1.1`, paired with gateway
+`v0.1.2`** (the release carrying GWP-001..GWP-008; golden mirror updated
+in lockstep). `COMPATIBILITY.md` gains the matching row (gateway
+`v0.1.2` ↔ SDK `v0.1.1` ↔ conformance runner `v0.1.1`); the existing
+release gate (green CI, manual tagging) and Renovate-driven upgrades
+stay unchanged.
 
-SDKP-009 is independent of GWP-002 / GWP-003 and ships first as
-**`v0.1.1`**, ahead of `v0.2.0`; the gateway then bumps its
-`conformance/go.mod` pin to `v0.1.1`.
+Order: the gateway `v0.1.2` tag lands first, then the SDK mirror PR is
+opened from the `v0.1.2` checkout and tagged `v0.1.1` once green; the
+gateway then bumps its `conformance/go.mod` pin to `v0.1.1`.
