@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -69,6 +70,22 @@ type boundWrapper struct {
 // Returns: the compact JWE string and nil, or an error. Fails closed on a
 // nil recipient or empty kid — no wrapper ever leaves unprotected.
 func SealBound(payload []byte, kid string, recipient *ecdh.PublicKey, binding Binding) (string, error) {
+	plaintext, err := boundPlaintext(payload, binding)
+	if err != nil {
+		return "", err
+	}
+	return Seal(plaintext, kid, recipient)
+}
+
+// boundPlaintext builds the bound wrapper plaintext shared by the public
+// SealBound and the unexported sealBound: a zero Binding.IssuedAt is
+// replaced with the seal time and an empty Binding.Nonce with a fresh
+// >=128-bit random base64url value.
+//
+// Parameters: payload is the application payload placed in wrapper data;
+// binding carries the wrapper from/to/service/iat/nonce values.
+// Returns: the marshalled wrapper bytes and nil, or an error.
+func boundPlaintext(payload []byte, binding Binding) ([]byte, error) {
 	issuedAt := binding.IssuedAt
 	if issuedAt.IsZero() {
 		issuedAt = time.Now()
@@ -77,7 +94,7 @@ func SealBound(payload []byte, kid string, recipient *ecdh.PublicKey, binding Bi
 	if nonce == "" {
 		generated, err := newBoundNonce()
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		nonce = generated
 	}
@@ -91,9 +108,31 @@ func SealBound(payload []byte, kid string, recipient *ecdh.PublicKey, binding Bi
 		Data:    payload,
 	})
 	if err != nil {
-		return "", fmt.Errorf("envelope: SealBound: wrapper encode: %w", err)
+		return nil, fmt.Errorf("envelope: SealBound: wrapper encode: %w", err)
 	}
-	return Seal(plaintext, kid, recipient)
+	return plaintext, nil
+}
+
+// sealBound is the unexported deterministic bound seal (test-only): the
+// same wrapper as SealBound, sealed through the internal seal path with a
+// caller-supplied ephemeral X25519 key and IV randomness, so a fixed
+// payload, binding, ephemeral, and reader produce byte-identical compact
+// JWEs. It is never exported — the public path always draws a fresh
+// ephemeral and fresh randomness from crypto/rand.
+//
+// Parameters: payload is the application payload placed in wrapper data;
+// kid is the recipient key identifier published in the protected header;
+// recipient is the recipient's X25519 use:enc public key; binding carries
+// the wrapper values (pin IssuedAt and Nonce for reproducibility);
+// ephemeral is the pinned sender ephemeral X25519 private key; rnd is the
+// IV randomness, nil meaning crypto/rand.
+// Returns: the compact JWE string and nil, or an error.
+func sealBound(payload []byte, kid string, recipient *ecdh.PublicKey, binding Binding, ephemeral *ecdh.PrivateKey, rnd io.Reader) (string, error) {
+	plaintext, err := boundPlaintext(payload, binding)
+	if err != nil {
+		return "", err
+	}
+	return seal(plaintext, kid, recipient, ephemeral, rnd)
 }
 
 // newBoundNonce generates the wrapper nonce for an empty Binding.Nonce:
