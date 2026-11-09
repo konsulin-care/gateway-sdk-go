@@ -24,14 +24,22 @@ jobs:
       # The workflow runs from the base branch (pull_request_target), so the
       # PR head is fetched explicitly from refs/pull/N/head — present in the
       # base repo for fork PRs too — alongside the base branch for the range.
+      # The base lands in a remote-tracking ref (refs/remotes/origin/...),
+      # never refs/heads/..., because pull_request_target checks out the base
+      # branch: fetching into a checked-out branch is refused by git.
       - name: Fetch PR head and base
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --no-tags origin \
             "+refs/pull/${PR_NUMBER}/head:refs/pull/${PR_NUMBER}/head" \
-            "+refs/heads/${BASE_REF}:refs/heads/${BASE_REF}"
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          # If the base branch was force-pushed past the fetched tip, the
+          # recorded BASE_SHA may be absent; fetch the exact SHA so the
+          # sign-off loop's rev-list range start resolves.
+          git cat-file -e "${BASE_SHA}^{commit}" || git fetch --no-tags origin "${BASE_SHA}"
       - name: Check Signed-off-by on every PR commit
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
