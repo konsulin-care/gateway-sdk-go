@@ -21,9 +21,15 @@ SDK-CLIENT-C01, SDK-RETRY-001, SDK-RETRY-002, SDK-RETRY-003, SDK-RETRY-C01.
 - `client.go` — `Client` construction (`New`; zero options fails, no
   silent defaults), `Do` request execution with the retry loop
 - `options.go` — functional options, `RetryPolicy`, `ReplayCache`
-  interface, `transportURL` guard (http requires opt-in + loopback host)
+  (a type alias of `wire.ReplayCache`, so one cache implementation
+  satisfies `wire`, `client`, and `verify`), `transportURL` guard (http
+  requires opt-in + loopback host)
 - `call_options.go` — per-call `Request`/`Response` and
-  `Request.WithIdempotencyKey`
+  `Request.WithIdempotencyKey`. `Request.Query` is `url.Values`
+  encoded into the request URL's query with `url.Values.Encode` on every
+  attempt (identical across retries; a nil Query sends an empty raw
+  query). The query is unsigned: `ks-party` signing covers `body_sha256`
+  only
 - `request.go` — `ResponseMeta`, `CallOption`, `WithResponseMeta`
 - `retry.go` — `ErrOutcomeUnknown`, backoff with jitter, `Retry-After`,
   fresh `jti` per attempt, terminal vs retryable classes

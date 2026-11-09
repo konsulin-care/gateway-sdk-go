@@ -7,7 +7,7 @@
 //
 // Usage:
 //
-//	conformance [-base-url url] [-operator-user user] [-callback addr] [-callback-url url] [-version]
+//	conformance [-base-url url] [-operator-user user] [-callback addr] [-callback-url url] [-party-health-url url] [-version]
 //
 // The operator password comes from CONFORMANCE_OPERATOR_PASSWORD
 // only; the command deliberately exposes no password flag and no TOTP
@@ -34,6 +34,7 @@ const (
 	envOperatorPass = "CONFORMANCE_OPERATOR_PASSWORD"
 	envCallbackAddr = "CONFORMANCE_CALLBACK_ADDR"
 	envCallbackURL  = "CONFORMANCE_CALLBACK_URL"
+	envPartyHealth  = "CONFORMANCE_PARTY_HEALTH_URL"
 )
 
 // main wires the real environment into run and exits with its code.
@@ -62,6 +63,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, lookup fu
 		"result-callback listen address host:port (or "+envCallbackAddr+"; empty binds an ephemeral loopback listener)")
 	callbackURL := fs.String("callback-url", "",
 		"externally reachable result-callback URL (or "+envCallbackURL+"; empty uses the receiver loopback URL)")
+	partyHealthURL := fs.String("party-health-url", "",
+		"QC-chain party health URL (or "+envPartyHealth+"; empty uses the runner default)")
 	showVersion := fs.Bool("version", false, "print the runner version and exit")
 	if err := fs.Parse(args); err != nil {
 		return conformance.ExitUsage
@@ -70,7 +73,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, lookup fu
 		_, _ = fmt.Fprintln(stdout, "conformance runner", conformance.Version())
 		return conformance.ExitOK
 	}
-	cfg := configFrom(lookup, *baseURL, *operatorUser, *callbackAddr, *callbackURL)
+	cfg := configFrom(lookup, *baseURL, *operatorUser, *callbackAddr, *callbackURL, *partyHealthURL)
 	if err := cfg.Validate(); err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		fs.Usage()
@@ -85,16 +88,20 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, lookup fu
 // an environment name only (no flag by design).
 //
 // Parameters: lookup reads the environment; baseURL, operatorUser,
-// callbackAddr, and callbackURL carry the parsed flag values, empty
+// callbackAddr, callbackURL, and partyHealthURL carry the parsed flag values, empty
 // when the flag was not passed.
 // Returns: the resolved configuration.
-func configFrom(lookup func(string) (string, bool), baseURL, operatorUser, callbackAddr, callbackURL string) *conformance.Config {
+func configFrom(
+	lookup func(string) (string, bool),
+	baseURL, operatorUser, callbackAddr, callbackURL, partyHealthURL string,
+) *conformance.Config {
 	return &conformance.Config{
-		BaseURL:      firstSet(baseURL, envValue(lookup, envBaseURL)),
-		OperatorUser: firstSet(operatorUser, envValue(lookup, envOperatorUser)),
-		OperatorPass: envValue(lookup, envOperatorPass),
-		CallbackAddr: firstSet(callbackAddr, envValue(lookup, envCallbackAddr)),
-		CallbackURL:  firstSet(callbackURL, envValue(lookup, envCallbackURL)),
+		BaseURL:        firstSet(baseURL, envValue(lookup, envBaseURL)),
+		OperatorUser:   firstSet(operatorUser, envValue(lookup, envOperatorUser)),
+		OperatorPass:   envValue(lookup, envOperatorPass),
+		CallbackAddr:   firstSet(callbackAddr, envValue(lookup, envCallbackAddr)),
+		CallbackURL:    firstSet(callbackURL, envValue(lookup, envCallbackURL)),
+		PartyHealthURL: firstSet(partyHealthURL, envValue(lookup, envPartyHealth)),
 	}
 }
 

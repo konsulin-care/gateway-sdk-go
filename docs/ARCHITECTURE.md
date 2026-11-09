@@ -12,16 +12,19 @@ code under `internal/`. Files ≤ 300 lines everywhere.
 
 ```
 gateway-sdk-go/
-  wire/                 # DTOs, typ constants, purposes, capabilities, *wire.Error
+  wire/                 # DTOs, typ constants, purposes, capabilities, *wire.Error,
+                        #   shared ReplayCache interface + Scope* constants (ADR-014)
   internal/jws/         # compact JWS encode/verify (RFC 7515/7518), alg checks,
                         #   ES256 DER<->raw R||S — hand-written, no go-jose/jwx
   internal/jwk/         # JWK/JWKS parse (RFC 7517), RFC 7638 thumbprints —
                         #   signing keys + X25519 use:enc recipient keys
   auth/                 # ks-party signing: claims, kid, proof of possession, fresh jti
   client/               # Client core: options, transport, idempotency, retry, errors
-  verify/               # inbound trust: JWKS cache, per-kind checks, middleware, ReplayCache
+  verify/               # inbound trust: JWKS cache, per-kind checks, middleware,
+                        #   in-memory ReplayCache default (alias of wire.ReplayCache)
   identity/             # normalization + HMAC identity hashes (gateway ADR-005)
-  envelope/             # compact JWE seal/open (ECDH-ES + A256GCM over X25519)
+  envelope/             # compact JWE seal/open (ECDH-ES + A256GCM over X25519),
+                        #   Bound Envelope helpers, use:enc key resolver (ADR-013/016)
   gateway/              # public gateway routes: JWKS (/.well-known/jwks), Health (/health)
   parties/ identities/ approvals/ listings/ payments/ webhooks/   # typed routes
   gatewaytest/          # fixture loaders, fakes, httptest helpers (offline test kit)
@@ -44,11 +47,21 @@ Normative rules (PRD §7):
   leaves.
 - `internal/jws` and `internal/jwk` are never re-exported; nothing outside them
   implements JWS/JWK primitives; only `auth`, `verify`, and `gatewaytest` use
-  `internal/jws`, and those three plus `envelope` use `internal/jwk`
-  (recipient `use:enc` key selection only).
-- `envelope` uses `crypto/ecdh` + `crypto/aes` + `wire` + `internal/jwk`
-  (recipient `use:enc` key selection, no jwk type re-exported) — JWE never
-  passes through `internal/jws`.
+  `internal/jws`, and those three plus `envelope` use `internal/jwk`. `envelope`
+  uses it for recipient `use:enc` keys only — parsing the party JWKS and
+  enumerating its encryption keys: exactly one OKP/X25519 `use:enc` key or
+  deny (`SelectRecipientEncKey`), plus the RFC 7638 `kid` of an X25519 key.
+  No `jwk` type crosses the API (ADR-005, ADR-016).
+- `envelope` uses `crypto/ecdh` + `crypto/aes` + `wire` + `internal/jwk` +
+  `verify` — JWE never passes through `internal/jws`. The `verify` edge is
+  `ExpectationsFromClaims(verify.Claims)`: bound-envelope expectations
+  derive from the already-verified delivery claims, never from caller
+  strings (ADR-013). The edge is one-directional — `verify` imports
+  neither `envelope` nor `client`.
+- `wire` defines the shared `ReplayCache` interface and the `ScopeJTI`,
+  `ScopeWebhookID`, `ScopeNonce` constants (ADR-014): `client` and `verify`
+  alias it, `verify` ships the in-memory default, and `envelope` takes
+  `wire.ReplayCache` directly — no consumer imports another consumer.
 - `gatewaytest` is imported only by test files (including the test-only
   `internal/integration` package) and the conformance runner
   (`internal/conformance` + `cmd/conformance`). No import cycles;
@@ -56,14 +69,14 @@ Normative rules (PRD §7):
 
 | Package | May import (module) | Notes |
 |---|---|---|
-| `wire` | — | stdlib only; contract leaf |
+| `wire` | — | stdlib only; contract leaf; defines the shared `ReplayCache` interface and `Scope*` constants |
 | `internal/jws` | — | stdlib only; never re-exported |
 | `internal/jwk` | — | stdlib only; never re-exported |
 | `auth` | `wire`, `internal/jws`, `internal/jwk` | signs outbound party requests |
-| `client` | `wire`, `auth` | imports no route packages |
-| `verify` | `wire`, `internal/jws`, `internal/jwk` | defines the `ReplayCache` interface |
+| `client` | `wire`, `auth` | imports no route packages; aliases `wire.ReplayCache` |
+| `verify` | `wire`, `internal/jws`, `internal/jwk` | aliases `wire.ReplayCache`; ships the in-memory default |
 | `identity` | `wire` | `crypto/hmac` identity hashes |
-| `envelope` | `wire`, `internal/jwk` | `crypto/ecdh`, `crypto/aes`; `internal/jwk` for `use:enc` recipient key selection |
+| `envelope` | `wire`, `internal/jwk`, `verify` | `crypto/ecdh`, `crypto/aes`; `internal/jwk` for `use:enc` selection by enumeration; `verify` for `ExpectationsFromClaims` (ADR-013) |
 | `gateway` | `client`, `auth`, `wire` | public gateway routes |
 | `parties` | `client`, `auth`, `wire` | typed routes |
 | `identities` | `client`, `auth`, `wire` | typed routes |
@@ -114,6 +127,26 @@ payload flows party-to-party with `envelope.Seal` to the recipient's `use:enc`
 key discovered from the recipient's party JWKS. The gateway never sees payload
 bytes.
 
+**Bound Envelope**: crossing payloads are sealed as Bound Envelopes —
+`envelope.SealBound` wraps the payload in `{v, from, to, service, iat,
+nonce, data}` and seals it (SDKP-001, ADR-013). `envelope.OpenBound`
+decrypts, then checks in order: supported `v`, `to`, `from`, `service`
+against expectations, `iat` freshness (default 5 min, hard cap 15 min,
+at most 60 s future skew), the `(from, nonce)` replay check, and the
+512 KiB data cap — fail closed, nil data on the first failure.
+Expectations derive from the already-verified delivery claims via
+`envelope.ExpectationsFromClaims(verify.Claims)`, so a caller never
+asserts values the token did not cover (the `envelope` → `verify` edge).
+
+**Sender enc-key resolution**: a sender does not know the recipient's
+`kid` in advance, so before sealing it resolves the recipient's active
+`use:enc` key with `envelope.EncKeyResolver` (SDKP-002, ADR-016): exactly
+one OKP/X25519 `use:enc` key in the party JWKS or deny
+(`SelectRecipientEncKey`), a per-party TTL cache, and `Refresh` after a
+seal/open failure rate-limited to one refetch per TTL window per party.
+The resolver fetches only through the caller-supplied `FetchFunc` —
+`envelope` never imports `parties` or any route package.
+
 ## 4. Security model (summary)
 
 - **Algorithms**: the SDK signs with **Ed25519 (JWS `alg` `EdDSA`) by
@@ -133,8 +166,17 @@ bytes.
 - **Kid-only key selection** from JWKS only: one rate-limited refetch per
   unknown `kid`, then deny. Rotation serves current + previous key, each `kid`
   its RFC 7638 thumbprint, so no config change ever follows a rotation.
-- **Replay**: `ReplayCache` interface (`jti`/`webhook_id`, atomic per key) with
-  an in-memory default; single-use `jti`, `webhook_id` dedupe.
+- **Replay**: the shared `wire.ReplayCache` interface — `Check` atomically
+  reserves `(scope, key)` until `until`, `Release` frees a reservation, any
+  error denies; scopes `jti`, `webhook_id`, `nonce` — with the in-memory
+  default in `verify`; single-use `jti`, `webhook_id` dedupe.
+- **Bound-envelope nonce/window/data cap**: `SealBound` generates ≥128-bit
+  (16-byte) nonces; `OpenBound` rejects an empty or >64-character nonce
+  before any cache consult, reserves `(from, nonce)` under the `nonce`
+  scope for `max(10 min, MaxAge + 60 s)` (freshness window plus future
+  skew covers every wrapper the `iat` check could still accept), and
+  rejects wrapper `data` over 524288 bytes (512 KiB). `iat` window:
+  default 5 min, hard cap 15 min, at most 60 s in the future.
 - **Transport**: `https` only unless the caller opts into
   `WithInsecureTransport` (local dev). **Logging**: method/path/status/
   request_id/`kid`/`typ` only — never bodies, tokens, keys, or the pepper.
@@ -155,6 +197,15 @@ bytes.
 - Either side drifting turns one CI red (lockstep). Contract-affecting changes
   update `COMPATIBILITY.md` (gateway ↔ SDK ↔ conformance-runner) in the same
   PR; consumers pin SDK tags.
+- `ks-delivery.json` is refreshed at the gateway whenever its claims change
+  (most recently the `service` and `listing_id` claims, SDKP-003): the mirror
+  and its `MANIFEST.json` hash update together, always via
+  `scripts/mirror-golden.sh`, never locally.
+- `envelope/testdata/bound-v1-decrypt.json` is an **SDK-owned** fixture —
+  the decrypt-only Bound Envelope vector (SDKP-001, ADR-013), regenerated
+  in-repo with `go test ./envelope -run TestBoundDecryptVector -update`.
+  It never lives under `testdata/golden/`, which holds only mirrored
+  gateway vectors (ADR-004); no test reads any path outside this module.
 
 ## 6. Testing strategy (layered)
 

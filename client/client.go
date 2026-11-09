@@ -169,7 +169,7 @@ func (c *Client) attempt(ctx context.Context, req Request, key string) (*Respons
 	}
 	target := *c.baseURL
 	target.Path = strings.TrimSuffix(c.baseURL.Path, "/") + req.Path
-	target.RawQuery = ""
+	target.RawQuery = req.Query.Encode()
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, target.String(), bytes.NewReader(req.Body))
 	if err != nil {
 		return nil, fmt.Errorf("client: build request: %w", err)

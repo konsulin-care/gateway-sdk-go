@@ -2,6 +2,7 @@ package client
 
 import (
 	"net/http"
+	"net/url"
 
 	"github.com/konsulin-care/gateway-sdk-go/wire"
 )
@@ -22,6 +23,11 @@ type Request struct {
 	// IdempotencyKey is sent verbatim when non-empty; empty with Idempotent
 	// set has Do generate the key for the call.
 	IdempotencyKey string
+	// Query is the URL query sent on every attempt, encoded with
+	// url.Values.Encode on the request path; a nil Query sends no query
+	// string (an empty raw query). Signing is unchanged — ks-party covers
+	// body_sha256 only, so the query is not signed.
+	Query url.Values
 }
 
 // WithIdempotencyKey returns a copy of r marked idempotent with the given

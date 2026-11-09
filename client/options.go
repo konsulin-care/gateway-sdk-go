@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"crypto"
 	"errors"
 	"fmt"
@@ -11,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/konsulin-care/gateway-sdk-go/wire"
 )
 
 // config collects all option values first, so option order never affects
@@ -121,16 +122,9 @@ type RetryPolicy struct {
 	MaxDelay    time.Duration // cap on one backoff delay
 }
 
-// ReplayCache atomically deduplicates retry-scope keys; matches
-// verify.ReplayCache so one implementation satisfies both.
-type ReplayCache interface {
-	// Check reserves (scope, key) until until: true when fresh, false on
-	// replay, or an error — callers deny on error.
-	Check(ctx context.Context, scope, key string, until time.Time) (bool, error)
-	// Release frees the (scope, key) reservation; unreserved pairs are a
-	// no-op.
-	Release(ctx context.Context, scope, key string) error
-}
+// ReplayCache atomically deduplicates retry-scope keys; an alias of
+// wire.ReplayCache so one implementation satisfies client and verify.
+type ReplayCache = wire.ReplayCache
 
 // transportURL parses raw and applies the guard: https always; http only
 // with insecure opted in, loopback only.

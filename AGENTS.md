@@ -7,7 +7,7 @@ stdlib-only Go client and verifier for the Konsulin gateway: enrollment and key
 rotation, identity, approvals, listings, payments, webhooks, inbound callback
 verification, and the JWE envelope. MIT, pre-v0.1.0.
 
-- PRD: [PROPOSAL.md](PROPOSAL.md) (every `SDK-*` requirement) · stub: [README.md](README.md).
+- PRD: [PROPOSAL.md](PROPOSAL.md) (every `SDK-*` requirement) · addendum: [ADDENDUM.md](ADDENDUM.md) (every `SDKP-*` requirement) · stub: [README.md](README.md).
 
 ## Contract authority (conflicts resolve upward)
 
@@ -15,7 +15,8 @@ verification, and the JWE envelope. MIT, pre-v0.1.0.
    normative sections: Token Kinds, Recipient Verification Rules, JWE Envelope,
    Gateway Key Rotation.
 2. Mirrored golden vectors in `testdata/golden/`.
-3. The PRD. It never redefines wire format.
+3. The PRD, [PROPOSAL.md](PROPOSAL.md), and [ADDENDUM.md](ADDENDUM.md)
+   (`SDKP-*` backend-adoption requirements). Neither redefines wire format.
 
 The gateway checkout is an **authoring-time reference only**: contract facts
 are read from it while writing code and docs, and `scripts/mirror-golden.sh`
@@ -33,7 +34,7 @@ out-of-band local check `mise run qc --mirror-check`, never a CI gate.
 
 ## Navigation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/ADR/](docs/ADR/) · [docs/tasks/](docs/tasks/)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/ADR/](docs/ADR/) · [docs/tasks/](docs/tasks/) · [ADDENDUM.md](ADDENDUM.md)
 - [README.md](README.md) (root stub) · [testdata/golden/README.md](testdata/golden/README.md) — one README per package dir below:
 
 - [wire](wire/README.md)

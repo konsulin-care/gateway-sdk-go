@@ -40,6 +40,12 @@ type Claims struct {
 	// PaymentID is the conditional payment reference on delivery tokens
 	// (the buyer's latest PAID payment); empty when absent.
 	PaymentID string
+	// Service is the conditional service claim on delivery tokens (the
+	// listing's service); empty when absent.
+	Service string
+	// ListingID is the conditional listing_id claim on delivery tokens;
+	// empty when absent.
+	ListingID string
 	// BodySHA256 is the base64url (unpadded) SHA-256 claim value over the
 	// exact body bytes on delivery/event tokens; empty on other kinds.
 	BodySHA256 string
@@ -149,6 +155,8 @@ func (c rawClaims) claims(typ string) Claims {
 	webhookID, _ := c.str("webhook_id")
 	userRef, _ := c.str("user_ref")
 	paymentID, _ := c.str("payment_id")
+	service, _ := c.str("service")
+	listingID, _ := c.str("listing_id")
 	bodySHA, _ := c.str("body_sha256")
 	aud, _ := c.audiences("aud")
 	iat, _ := c.seconds("iat")
@@ -164,6 +172,8 @@ func (c rawClaims) claims(typ string) Claims {
 		WebhookID:  webhookID,
 		UserRef:    userRef,
 		PaymentID:  paymentID,
+		Service:    service,
+		ListingID:  listingID,
 		BodySHA256: bodySHA,
 		IssuedAt:   iat,
 		ExpiresAt:  exp,

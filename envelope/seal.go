@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -70,15 +71,19 @@ func Seal(payload []byte, kid string, recipient *ecdh.PublicKey) (string, error)
 	return seal(payload, kid, recipient, ephemeral)
 }
 
-// seal is the internal seal with an injected ephemeral key: Seal generates
-// a fresh one per message, while RFC-vector tests pin the epk so the key
-// agreement becomes deterministic.
+// seal is the internal seal with an injected ephemeral key and optional
+// randomness source: Seal generates a fresh ephemeral per message and
+// draws the IV from crypto/rand, while deterministic vector tests pin
+// the epk and the IV randomness so the whole seal becomes reproducible.
 //
 // Parameters: payload the plaintext; kid the recipient key identifier;
 // recipient the recipient's X25519 public key; ephemeral the sender's
-// ephemeral X25519 private key.
+// ephemeral X25519 private key; rnd is the IV randomness source — nil or
+// omitted means crypto/rand, so public Seal/SealBound output stays byte-
+// identical for callers. Never exported: the public path always draws a
+// fresh ephemeral.
 // Returns: the compact JWE string and nil, or an error.
-func seal(payload []byte, kid string, recipient *ecdh.PublicKey, ephemeral *ecdh.PrivateKey) (string, error) {
+func seal(payload []byte, kid string, recipient *ecdh.PublicKey, ephemeral *ecdh.PrivateKey, rnd ...io.Reader) (string, error) {
 	z, err := ephemeral.ECDH(recipient)
 	if err != nil {
 		return "", fmt.Errorf("envelope: seal: ECDH agreement: %w", err)
@@ -102,8 +107,14 @@ func seal(payload []byte, kid string, recipient *ecdh.PublicKey, ephemeral *ecdh
 	if err != nil {
 		return "", err
 	}
+	// nil (or omitted) randomness means crypto/rand; an injected reader
+	// replaces it on the test-only deterministic path.
+	ivSource := io.Reader(rand.Reader)
+	if len(rnd) > 0 && rnd[0] != nil {
+		ivSource = rnd[0]
+	}
 	iv := make([]byte, ivBytes)
-	if _, err := rand.Read(iv); err != nil {
+	if _, err := io.ReadFull(ivSource, iv); err != nil {
 		return "", fmt.Errorf("envelope: seal: IV randomness: %w", err)
 	}
 	// AAD is the ASCII bytes of the encoded protected header (RFC 7516
