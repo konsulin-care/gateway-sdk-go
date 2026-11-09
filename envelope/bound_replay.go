@@ -13,6 +13,11 @@ import (
 // (from, nonce) pair in the ReplayCache: ten minutes (SDKP-001).
 const minNonceReplayRetention = 10 * time.Minute
 
+// maxNonceChars is the largest wrapper nonce OpenBound accepts: 64
+// characters. An empty or longer nonce fails closed before the
+// ReplayCache is ever consulted (SDKP-001 nonce format rules).
+const maxNonceChars = 64
+
 // errNonceReplay denies a bound envelope whose (from, nonce) pair is
 // already reserved: the ReplayCache reported the pair as seen
 // (SDKP-001). It carries only the check fact, never the wrapper values.
@@ -28,8 +33,24 @@ func nonceReplayKey(from, nonce string) string {
 	return from + "\x00" + nonce
 }
 
+// checkNonceFormat enforces the SDKP-001 nonce format rules: an empty
+// nonce or one longer than 64 characters fails closed before any cache
+// consultation. The error names only the check fact, never the nonce.
+//
+// Parameters: nonce is the wrapper nonce.
+// Returns: nil when the nonce is within bounds, or an error.
+func checkNonceFormat(nonce string) error {
+	if nonce == "" {
+		return errors.New("envelope: OpenBound: nonce is empty")
+	}
+	if len(nonce) > maxNonceChars {
+		return fmt.Errorf("envelope: OpenBound: nonce exceeds %d chars", maxNonceChars)
+	}
+	return nil
+}
+
 // checkNonceReplay enforces the SDKP-001 nonce replay check, step 7 of
-// OpenBound: it atomically reserves (wire.ScopeNonce, from+nonce) in the
+// OpenBound: it first validates the nonce format, then atomically reserves (wire.ScopeNonce, from+nonce) in the
 // caller's ReplayCache until now + max(10 min, maxAge + 60 s) — the
 // freshness window plus the future-skew bound covers every wrapper the
 // iat check could still accept, and ten minutes is the ADDENDUM floor.
@@ -43,6 +64,9 @@ func nonceReplayKey(from, nonce string) string {
 // Returns: nil when the pair was fresh (reserved), or an error naming the
 // replay or the cache failure — never the wrapper values.
 func checkNonceReplay(ctx context.Context, cache wire.ReplayCache, from, nonce string, maxAge time.Duration, now time.Time) error {
+	if err := checkNonceFormat(nonce); err != nil {
+		return err
+	}
 	if cache == nil {
 		return nil
 	}
