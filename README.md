@@ -8,9 +8,13 @@ runtime, MIT licensed — `go get github.com/konsulin-care/gateway-sdk-go`.
 
 ## Status
 
-Pre-v0.1.0: the packages, docs and tooling are in place and the recipes below
-run offline; requirement-by-requirement status lives in the PRD
-[PROPOSAL.md](PROPOSAL.md) and the phase tasks under [docs/tasks/](docs/tasks/).
+**v0.1.0 released** — the packages, docs and tooling are in place and the
+recipes below run offline. **v0.1.1 in progress** — the additive ADDENDUM
+backend-adoption items (`SDKP-001`…`SDKP-009`), shipping as SDK `v0.1.1`
+paired with gateway `v0.1.2`. Requirement-by-requirement status lives in
+the PRD [PROPOSAL.md](PROPOSAL.md), the addendum
+[ADDENDUM.md](ADDENDUM.md), and the phase tasks under
+[docs/tasks/](docs/tasks/).
 
 ## Recipes (SDK-README-001)
 

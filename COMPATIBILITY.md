@@ -9,6 +9,7 @@ together.
 
 | Gateway | SDK | Conformance runner | Notes |
 |---------|-----|--------------------|-------|
+| `v0.1.2` | `v0.1.1` | `v0.1.1` (`go run ./cmd/conformance -version`, versioned with the module per SDK-CONF-003) | ADDENDUM backend-adoption release: `SDKP-001`…`SDKP-009`, all additive — no breaking change to the `v0.1.0` surface. Golden mirror refreshed against the gateway `v0.1.2` checkout in lockstep (ADR-004); conformance runs in development mode as below. |
 | Development-mode releases — the wire contract mirrored from gateway commit `e93314fd` (pinned by hash in [`testdata/golden/MANIFEST.json`](testdata/golden/MANIFEST.json)); e2e exercises the `ghcr.io/konsulin-care/konsulin-gateway:latest` image | `v0.1.0` | `v0.1.0` (`go run ./cmd/conformance`, versioned with the module per SDK-CONF-003) | **Conformance runs against development-mode gateways only** (`APP_MODE=development`: no admin TOTP secret, raised `APP_RATE_*` limits, plain-HTTP callback receivers via `APP_OUTBOUND_ALLOW_INSECURE`) — the throwaway e2e profile, never production. The gateway-side `qc --flow` runner pin lands after v0.1.0 (M5, gateway work). |
 
 ## How to read this
