@@ -25,10 +25,18 @@ certifying the [Developer Certificate of Origin, Version 1.1](https://developerc
 git commit -s   # appends "Signed-off-by: Your Name <you@example.com>"
 ```
 
-The `DCO` workflow ([.github/workflows/dco.yml](.github/workflows/dco.yml))
-checks every commit in the pull request and fails, naming each commit that
-lacks the line. There is no override and no history rewrite — to fix an
-unsigned commit, amend it and force-push:
+This is the convention to follow from now on, so that re-enabling the check
+later needs no rework: sign off every commit yourself, whether it is the
+first or the fiftieth.
+
+The `DCO` workflow
+([.github/workflows/dco.yml](.github/workflows/dco.yml)) is currently
+deactivated — its trigger is disabled, so no automatic check runs on pull
+requests today and a commit without the line is not reported by CI. DCO
+becomes enforced from the first external contribution (ADR-010).
+
+When the check is (re-)enabled there is no override and no history rewrite —
+to fix an unsigned commit, amend it and force-push:
 
 ```sh
 git commit --amend -s --no-edit && git push --force-with-lease
